@@ -13,3 +13,4 @@ data/
 
 data/*
 scraper/*
+AZURE_TEARDOWN.local.md
