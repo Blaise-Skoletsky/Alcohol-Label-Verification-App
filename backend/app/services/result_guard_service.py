@@ -42,8 +42,11 @@ class ResultGuardService:
         return field
 
     def _guard_alcohol_content(self, field: VerificationFieldResult) -> VerificationFieldResult:
-        if field.status == "pass" and self._has_clear_exception(field):
-            return field
+        if self._has_clear_exception(field):
+            reason = field.reason
+            if field.status != "pass":
+                reason = "Alcohol content is not required for this table/light wine designation."
+            return field.model_copy(update={"status": "pass", "reason": reason})
 
         application_abv = self._extract_abv(field.application_value)
         label_abv = self._extract_abv(field.label_value)
@@ -75,16 +78,17 @@ class ResultGuardService:
         return normalized not in {"n/a", "na", "none", "unknown", "unreadable", "missing"}
 
     def _has_clear_exception(self, field: VerificationFieldResult) -> bool:
-        combined = " ".join(
-            value.lower()
-            for value in [
-                field.application_value or "",
-                field.label_value or "",
-                field.reason or "",
-            ]
-        )
-        return "exception" in combined and any(
-            marker in combined for marker in ["not required", "legitimately absent", "exempt"]
+        application_value = (field.application_value or "").lower()
+        label_value = (field.label_value or "").lower()
+        reason = (field.reason or "").lower()
+        combined = " ".join([application_value, label_value, reason])
+        exception_markers = ["not required", "legitimately absent", "exempt"]
+        wine_markers = ["table wine", "light wine", "wine designation"]
+
+        return (
+            any(marker in application_value for marker in exception_markers)
+            and any(marker in label_value for marker in exception_markers)
+            and any(marker in combined for marker in wine_markers)
         )
 
     def _extract_abv(self, value: str | None) -> float | None:

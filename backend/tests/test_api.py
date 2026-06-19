@@ -473,3 +473,31 @@ def test_result_guard_does_not_allow_non_abv_text_to_pass_alcohol_content() -> N
     assert result.summary == "Manual review needed: alcohol content."
     assert result.fields.alcohol_content.status == "needs_review"
     assert "alcohol-content" in result.fields.alcohol_content.reason
+
+
+def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.needs_review,
+            summary="Model requested review.",
+            fields=make_fields(
+                alcohol_content=make_field(
+                    status="needs_review",
+                    application_value="Not required for table wine designation",
+                    label_value="Not required for table wine designation",
+                    reason="Alcohol content could not be confidently extracted as an alcohol-content value.",
+                )
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.alcohol_content.status == "pass"
+    assert result.fields.alcohol_content.reason == (
+        "Alcohol content is not required for this table/light wine designation."
+    )

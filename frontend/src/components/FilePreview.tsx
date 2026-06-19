@@ -125,6 +125,18 @@ function Lightbox({ src, alt, onClose }: LightboxProps) {
 
   const reset = useCallback(() => setTransform(IDENTITY), []);
 
+  const isPointInsideImage = useCallback((clientX: number, clientY: number) => {
+    const img = imgRef.current;
+    if (!img) return false;
+    const rect = img.getBoundingClientRect();
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  }, []);
+
   // Keep a ref of the current scale so wheel/step handlers read a fresh value
   // without re-subscribing.
   const currentScaleRef = useRef(transform.scale);
@@ -168,16 +180,21 @@ function Lightbox({ src, alt, onClose }: LightboxProps) {
     const stage = stageRef.current;
     if (!stage) return;
     function onWheel(event: WheelEvent) {
+      if (!isPointInsideImage(event.clientX, event.clientY)) return;
       event.preventDefault();
       const factor = Math.exp(-event.deltaY * 0.0015);
       zoomToPoint(event.clientX, event.clientY, currentScaleRef.current * factor);
     }
     stage.addEventListener("wheel", onWheel, { passive: false });
     return () => stage.removeEventListener("wheel", onWheel);
-  }, [zoomToPoint]);
+  }, [isPointInsideImage, zoomToPoint]);
 
   function onPointerDown(event: React.PointerEvent) {
     if (event.button !== 0) return;
+    if (!isPointInsideImage(event.clientX, event.clientY)) {
+      onClose();
+      return;
+    }
     const g = gesture.current;
     g.pointerId = event.pointerId;
     g.startX = g.lastX = event.clientX;
@@ -219,6 +236,7 @@ function Lightbox({ src, alt, onClose }: LightboxProps) {
       // Pointer capture may already be gone; ignore.
     }
     if (wasClick) {
+      if (!isPointInsideImage(event.clientX, event.clientY)) return;
       // Click-to-zoom toward the clicked point. At max zoom, a click resets.
       if (currentScaleRef.current >= MAX_SCALE) {
         reset();

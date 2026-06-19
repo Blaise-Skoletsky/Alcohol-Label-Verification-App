@@ -205,8 +205,9 @@ for still wines in the 7–14% range that carry a "table wine" or "light wine" d
 the label.
 
 PASS: Values match when normalized; OR ABV is omitted on both the application and the label \
-for a 7–14% wine with a table wine or light wine designation (set reason: "not required for \
-table wine designation").
+for a 7–14% wine with a table wine or light wine designation. If application_value and \
+label_value both say alcohol content is "Not required for table wine designation" or equivalent, \
+status must be pass, not needs_review (set reason: "not required for table wine designation").
 
 NEEDS REVIEW: ABV is present on one region but not the other; cannot determine whether the \
 product exceeds 14% or whether a table/light wine designation applies; value is partially legible.

@@ -436,15 +436,11 @@
   justify-content: center;
   overflow: hidden;
   touch-action: none;
-  cursor: zoom-in;
+  cursor: zoom-out;
 }
 
 .lightbox-stage.is-zoomed {
-  cursor: grab;
-}
-
-.lightbox-stage.is-zoomed:active {
-  cursor: grabbing;
+  cursor: zoom-out;
 }
 
 .lightbox-img {
@@ -457,6 +453,15 @@
   user-select: none;
   -webkit-user-drag: none;
   will-change: transform;
+  cursor: zoom-in;
+}
+
+.lightbox-stage.is-zoomed .lightbox-img {
+  cursor: grab;
+}
+
+.lightbox-stage.is-zoomed .lightbox-img:active {
+  cursor: grabbing;
 }
 
 .lightbox-controls {

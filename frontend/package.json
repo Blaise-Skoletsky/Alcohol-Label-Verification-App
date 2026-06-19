@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "generate:samples": "node scripts/generate-sample-labels.mjs",
+    "predev": "npm run generate:samples",
     "dev": "vite --host 0.0.0.0",
+    "prebuild": "npm run generate:samples",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
