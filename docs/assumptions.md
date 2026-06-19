@@ -26,7 +26,7 @@ This prototype is intended for a Treasury-facing rollout demo. The preferred pat
 
 ## Storage Assumptions
 
-- The server must not store uploaded label artwork, PDFs, or application data in cloud storage for the initial prototype.
+- The server must not store uploaded label artwork or application data in cloud storage for the initial prototype.
 - Backend processing may use memory or temporary files while a request or in-process batch is active.
 - Recent history should live in the browser where practical.
 - Browser-local history should target roughly one day of retention.
@@ -36,13 +36,13 @@ This prototype is intended for a Treasury-facing rollout demo. The preferred pat
 
 - The app is a verification aid, not final legal approval or TTB certification.
 - The UI should stay simple enough for non-technical compliance users.
-- The current workflow uses one uploaded image or PDF page containing both the application and the label artwork.
+- The current workflow uses one uploaded PNG or JPG image containing both the application and the label artwork.
 - The model is responsible for flagging uploads where the application portion or label artwork portion is missing, unreadable, or ambiguous.
 - The primary demo traffic assumption is one to two concurrent users.
 - The main stress case is one user uploading roughly 100-400 combined application+label files in a batch.
 - Batch upload size and model-call concurrency are separate. A large upload should process through a small bounded worker pool, initially five concurrent model calls.
 - Batch results should appear incrementally as soon as individual labels complete so a reviewer can begin working before the full batch finishes.
-- The app should support PNG, JPG/JPEG, and PDF combined application+label artifacts.
+- The app should support PNG and JPG/JPEG combined application+label artifacts.
 - Real public or user-provided label/application examples are preferred for tests. Synthetic labels are not the primary fixture strategy.
 
 ## Verification Rule Assumptions (TTB Mandatory Label Information)

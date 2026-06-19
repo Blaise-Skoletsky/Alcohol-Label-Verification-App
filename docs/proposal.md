@@ -1,6 +1,6 @@
 # Goals
 
-- Accept one primary input for every verification: a single image or PDF page that contains both the label application and the label artwork.
+- Accept one primary input for every verification: a single PNG or JPG image that contains both the label application and the label artwork.
 - Treat missing application content or missing label artwork inside the submitted image as a model-detected issue that returns `needs_review`, `fail`, or `processing_error` with evidence.
 - Verify the initial production scope with high confidence:
   - Brand name on the artwork matches the label application.
@@ -26,8 +26,8 @@
 - Prefer real public or user-provided label/application examples for test fixtures; synthetic fixtures should not be the primary testing strategy.
 - Include subjective-quality fixtures in the test suite: borderline brand-name matches, partial warning text, difficult ABV formatting, glare, blur, skew, curved bottles, poor lighting, low contrast, and awkward camera angles.
 - Include test cases for exact-warning failures, including changed wording, wrong capitalization, missing prefix, and warning text that is present but visually hard to read.
-- Handle poor image quality as a first-class requirement. The system should attempt robust extraction and confidence scoring before asking for a better image.
-- Return structured, reviewable evidence for each decision: extracted field value, application value, pass/fail/needs-review status, confidence, and reason.
+- Handle poor image quality as a first-class requirement. The system should attempt robust extraction and identify specific unreadable or ambiguous areas before asking for a better image.
+- Return structured, reviewable evidence for each decision: extracted field value, application value, pass/fail/needs-review status, evidence, and reason.
 - Prefer clear "needs review" outcomes over false certainty when evidence is incomplete, ambiguous, or internally inconsistent.
 
 # Invariants
@@ -41,7 +41,7 @@
 - One bad label, unreadable image, model failure, or malformed application row must not fail the entire batch.
 - The original combined application+label upload must remain linked to every result so a reviewer can trace a decision back to its evidence.
 - The system must distinguish these result states at minimum: `pass`, `fail`, `needs_review`, and `processing_error`.
-- Poor image quality must not be an automatic rejection by itself. The system must attempt extraction, report confidence, and identify the specific reason review is needed.
+- Poor image quality must not be an automatic rejection by itself. The system must attempt extraction and identify the specific reason review is needed.
 - The system must not mark a field as passing unless the extracted evidence supports the application value within documented tolerance rules.
 - ABV comparison must use numeric normalization before comparison, including common equivalent forms such as percent ABV and proof where applicable, but the normalized values must match exactly. `49.5%` is not the same as `50%`.
 - Brand-name comparison must allow documented formatting differences while still flagging substantive wording differences.

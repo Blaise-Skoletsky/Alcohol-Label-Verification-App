@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-type SampleCategory = "pass" | "review" | "fail";
+type SampleCategory = "pass" | "fail";
 type FilterKey = "all" | SampleCategory;
 
 interface SampleEntry {
@@ -13,101 +13,113 @@ interface SampleEntry {
 
 const SAMPLES: SampleEntry[] = [
   {
-    id: "jd",
-    brand: "Jack Daniel's Winter Jack",
-    file: "pass/jack_daniel_s_2013-04-24.png",
-    cat: "pass",
-    desc: "Clean application and label values for a straightforward pass case.",
-  },
-  {
     id: "casa",
     brand: "Casamigos Tequila",
-    file: "pass/casamigos_2014-03-09.png",
+    file: "pass/casamigos_glare_readable.png",
     cat: "pass",
-    desc: "Spirits label with matching brand, class, warning, and contents.",
+    desc: "Expected pass: spirits label with readable brand, class, alcohol content, net contents, origin, and warning text.",
   },
   {
     id: "m47b",
     brand: "Monkey 47 Dry Gin",
-    file: "pass/monkey_47_2014-03-28.png",
+    file: "pass/monkey_47.png",
     cat: "pass",
-    desc: "Imported gin sample with complete mandatory label details.",
+    desc: "Expected pass: imported gin label with complete mandatory label details and readable application values.",
   },
   {
     id: "coyam",
     brand: "Coyam (Chile)",
-    file: "pass/coyam_2011-03-30.png",
+    file: "pass/coyam.png",
     cat: "pass",
-    desc: "Wine label sample with expected matching application data.",
+    desc: "Expected pass: wine label with matching brand, origin, contents, and required warning information.",
   },
   {
     id: "nat",
     brand: "Natura Cabernet",
-    file: "needs-review/natura_2011-07-25.png",
-    cat: "review",
-    desc: "Wine label where one or more details should require human review.",
+    file: "pass/natura.png",
+    cat: "pass",
+    desc: "Expected pass: original Natura label includes the required government warning and supporting label details.",
   },
   {
     id: "gek",
     brand: "Gekkeikan Sake",
-    file: "needs-review/gekkeikan_2013-01-04.png",
-    cat: "review",
-    desc: "Imported sake example with fields that may need closer inspection.",
+    file: "pass/gekkeikan_low_light_readable.png",
+    cat: "pass",
+    desc: "Expected pass: original sake label is readable and includes the expected class, contents, importer, and warning details.",
   },
   {
     id: "chick",
     brand: "Chicken Dinner Red",
-    file: "needs-review/chicken_dinner_2012-07-30.png",
-    cat: "review",
-    desc: "Wine sample intended to surface ambiguous or incomplete fields.",
-  },
-  {
-    id: "howl",
-    brand: "Howling Moon Moonshine",
-    file: "needs-review/howling_moon_2012-01-06.png",
-    cat: "review",
-    desc: "Spirits sample where the model should avoid over-confident approval.",
-  },
-  {
-    id: "mack",
-    brand: "Mackinaw Trail",
-    file: "fail/mackinaw_trail_2006-04-14.png",
-    cat: "fail",
-    desc: "Known mismatch sample for testing failed verification output.",
+    file: "pass/chicken_dinner.png",
+    cat: "pass",
+    desc: "Expected pass: original Chicken Dinner label includes readable front/back labels and the required warning block.",
   },
   {
     id: "mid",
     brand: "Midnight Moon",
-    file: "fail/midnight_moon_2008-04-22.png",
-    cat: "fail",
-    desc: "Spirits label with expected compliance conflicts.",
+    file: "pass/midnight_moon.png",
+    cat: "pass",
+    desc: "Expected pass: original spirits label has readable application and label evidence for required checks.",
   },
   {
-    id: "gtd",
-    brand: "Grand Traverse Distillery",
-    file: "fail/grand_traverse_distillery_2012-05-05.png",
-    cat: "fail",
-    desc: "Distillery sample intended to produce failed checks.",
+    id: "casa-glare",
+    brand: "Casamigos Tequila",
+    file: "pass/casamigos_glare_readable.png",
+    cat: "pass",
+    desc: "Expected pass: the photo has glare, but the required label text is still readable enough to verify.",
   },
   {
-    id: "found",
-    brand: "Founders",
-    file: "fail/founders_2026-01-29.png",
+    id: "gekkeikan-lighting",
+    brand: "Gekkeikan Sake",
+    file: "pass/gekkeikan_low_light_readable.png",
+    cat: "pass",
+    desc: "Expected pass: lighting is dim, but the label and application values remain readable enough to verify.",
+  },
+  {
+    id: "jd",
+    brand: "Jack Daniel's Winter Jack",
+    file: "pass/jack_daniels_winter_jack.png",
+    cat: "pass",
+    desc: "Expected pass: application says distilled spirits; label says Tennessee cider, a blend using Tennessee whiskey.",
+  },
+  {
+    id: "mack",
+    brand: "Mackinaw Trail",
+    file: "fail/mackinaw_trail.png",
     cat: "fail",
-    desc: "Malt beverage label with expected verification failures.",
+    desc: "Expected fail: the label evidence is missing or unclear for at least one required verification field.",
+  },
+  {
+    id: "chick-warning",
+    brand: "Chicken Dinner Red",
+    file: "fail/chicken_dinner_fail_incorrect_government_warning.png",
+    cat: "fail",
+    desc: "Expected fail: the government warning block was changed to incorrect, non-compliant warning language.",
+  },
+  {
+    id: "natura-warning",
+    brand: "Natura Cabernet",
+    file: "fail/natura_fail_missing_government_warning.png",
+    cat: "fail",
+    desc: "Expected fail: the government warning paragraph is missing from the label artwork.",
+  },
+  {
+    id: "monkey-rotated",
+    brand: "Monkey 47 Dry Gin",
+    file: "fail/monkey_47_fail_rotated_label.png",
+    cat: "fail",
+    desc: "Expected fail: artifact legibility fails because the application is straight but the embedded label images are rotated and not reviewable.",
   },
 ];
 
 const BADGE_LABELS: Record<SampleCategory, string> = {
   pass: "Should pass",
-  review: "Needs review",
   fail: "Should fail",
 };
 
 const FILTER_DEFS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "pass", label: "Should pass" },
-  { key: "review", label: "Needs review" },
   { key: "fail", label: "Should fail" },
 ];
 
@@ -137,7 +149,6 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
   const counts: Record<FilterKey, number> = {
     all: SAMPLES.length,
     pass: SAMPLES.filter((sample) => sample.cat === "pass").length,
-    review: SAMPLES.filter((sample) => sample.cat === "review").length,
     fail: SAMPLES.filter((sample) => sample.cat === "fail").length,
   };
 

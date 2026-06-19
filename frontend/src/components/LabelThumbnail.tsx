@@ -9,14 +9,11 @@ type LabelThumbnailProps = {
 // Shows the real label image when available, falling back to mono initials on
 // a gradient (matching the design's placeholder treatment).
 export function LabelThumbnail({ item, size = "sm" }: LabelThumbnailProps) {
-  const isImage =
-    item.previewUrl &&
-    !(item.mimeType === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf"));
   const brand = getItemBrand(item);
 
   return (
     <span className={`label-thumb label-thumb-${size}`} aria-hidden="true">
-      {isImage ? (
+      {item.previewUrl ? (
         <img src={item.previewUrl} alt="" className="label-thumb-img" />
       ) : (
         <span className="label-thumb-initials">{getInitials(brand)}</span>

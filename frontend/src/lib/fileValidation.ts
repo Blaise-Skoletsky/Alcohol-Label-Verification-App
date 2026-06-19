@@ -49,7 +49,6 @@ export function buildDefaultFields(): FieldSummary[] {
     status: "queued",
     applicationValue: "Waiting for result",
     labelValue: "Waiting for result",
-    confidence: "Not available yet",
     reason: "This check has not completed yet.",
     evidence: [],
   }));
@@ -62,9 +61,6 @@ export function getExtension(fileName: string) {
 
 function inferMimeType(fileName: string) {
   const extension = getExtension(fileName);
-  if (extension === ".pdf") {
-    return "application/pdf";
-  }
   if (extension === ".png") {
     return "image/png";
   }

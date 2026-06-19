@@ -1,35 +1,50 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { BatchItem, UiStatus } from "../types/verification";
+import { DemoInfoModal } from "./DemoInfoModal";
 import { ResultsList } from "./ResultsList";
 
-type ResultFilter = "all" | "pass" | "needs-review" | "fail";
+export type ResultFilter = "all" | "pass" | "needs-review" | "fail";
+
+export function matchesFilter(item: BatchItem, filter: ResultFilter) {
+  if (filter === "all") return true;
+  if (filter === "fail") return item.status === "fail" || item.status === "processing-error";
+  return item.status === filter;
+}
 
 type ResultsPanelProps = {
   items: BatchItem[];
+  filteredItems: BatchItem[];
   statusCounts: Record<UiStatus, number>;
+  activeFilter: ResultFilter;
+  onFilterChange: (filter: ResultFilter) => void;
   onOpenDetails: (index: number) => void;
   onOpenSamplePicker: () => void;
 };
 
-export function ResultsPanel({ items, statusCounts, onOpenDetails, onOpenSamplePicker }: ResultsPanelProps) {
-  const [activeFilter, setActiveFilter] = useState<ResultFilter>("all");
+export function ResultsPanel({ items, filteredItems, statusCounts, activeFilter, onFilterChange, onOpenDetails, onOpenSamplePicker }: ResultsPanelProps) {
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const failedCount = statusCounts.fail + statusCounts["processing-error"];
   const reviewCount = statusCounts["needs-review"];
 
-  const filteredItems = useMemo(
-    () => items.filter((item) => matchesFilter(item, activeFilter)),
-    [activeFilter, items],
-  );
-
   return (
     <section className="results-panel">
       <header className="main-header">
-        <h1>Open Applications</h1>
-        <p className="main-subtitle">
-          Every application you&apos;ve submitted and where it stands. Click a row to see the
-          evidence.
-        </p>
+        <div className="main-header-row">
+          <div>
+            <h1>Open Applications</h1>
+            <p className="main-subtitle">
+              Every application you&apos;ve submitted and where it stands. Click a row to see the
+              evidence.
+            </p>
+          </div>
+          <button type="button" className="info-button" onClick={() => setInfoOpen(true)}>
+            <span className="info-button-icon" aria-hidden="true">
+              i
+            </span>
+            Demo info
+          </button>
+        </div>
       </header>
 
       <div className="stats-row">
@@ -45,28 +60,28 @@ export function ResultsPanel({ items, statusCounts, onOpenDetails, onOpenSampleP
           count={items.length}
           filter="all"
           activeFilter={activeFilter}
-          onSelect={setActiveFilter}
+          onSelect={onFilterChange}
         />
         <FilterPill
           label="Passed"
           count={statusCounts.pass}
           filter="pass"
           activeFilter={activeFilter}
-          onSelect={setActiveFilter}
+          onSelect={onFilterChange}
         />
         <FilterPill
           label="Needs review"
           count={reviewCount}
           filter="needs-review"
           activeFilter={activeFilter}
-          onSelect={setActiveFilter}
+          onSelect={onFilterChange}
         />
         <FilterPill
           label="Failed"
           count={failedCount}
           filter="fail"
           activeFilter={activeFilter}
-          onSelect={setActiveFilter}
+          onSelect={onFilterChange}
         />
       </div>
 
@@ -98,6 +113,8 @@ export function ResultsPanel({ items, statusCounts, onOpenDetails, onOpenSampleP
           />
         )}
       </div>
+
+      <DemoInfoModal open={infoOpen} onClose={() => setInfoOpen(false)} />
     </section>
   );
 }
@@ -143,12 +160,3 @@ function FilterPill({ label, count, filter, activeFilter, onSelect }: FilterPill
   );
 }
 
-function matchesFilter(item: BatchItem, filter: ResultFilter) {
-  if (filter === "all") {
-    return true;
-  }
-  if (filter === "fail") {
-    return item.status === "fail" || item.status === "processing-error";
-  }
-  return item.status === filter;
-}

@@ -5,8 +5,8 @@ from fastapi import UploadFile
 from app.models.uploads import ValidatedUpload
 
 
-ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".pdf"}
-ALLOWED_FILE_TYPES = [".png", ".jpg", ".jpeg", ".pdf"]
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+ALLOWED_FILE_TYPES = [".png", ".jpg", ".jpeg"]
 
 
 class UploadValidationError(ValueError):
@@ -18,8 +18,6 @@ def _sniff_extension(content: bytes) -> str | None:
         return ".png"
     if content.startswith(b"\xff\xd8\xff"):
         return ".jpg"
-    if content.startswith(b"%PDF"):
-        return ".pdf"
     return None
 
 
@@ -35,7 +33,7 @@ class UploadService:
 
         extension = Path(filename).suffix.lower()
         if extension not in ALLOWED_EXTENSIONS:
-            raise UploadValidationError("Only PNG, JPG, JPEG, or PDF files can be uploaded.")
+            raise UploadValidationError("Only PNG, JPG, or JPEG files can be uploaded.")
 
         content = await file.read()
         if not content:
@@ -50,7 +48,7 @@ class UploadService:
         sniffed_extension = _sniff_extension(content)
         if sniffed_extension is None:
             raise UploadValidationError(
-                "We could not recognize this file. Please upload a PNG, JPG, JPEG, or PDF file."
+                "We could not recognize this file. Please upload a PNG, JPG, or JPEG file."
             )
 
         if extension == ".jpeg":

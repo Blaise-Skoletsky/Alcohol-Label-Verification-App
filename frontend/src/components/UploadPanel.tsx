@@ -39,7 +39,14 @@ export function UploadPanel({
   return (
     <div className="upload-panel">
       <button type="button" className="sample-button" onClick={onOpenSamplePicker}>
-        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 15 15"
+          fill="none"
+          style={{ flexShrink: 0 }}
+          aria-hidden="true"
+        >
           <rect x="0.5" y="0.5" width="6" height="6" rx="1.5" fill="#1a1a1a" />
           <rect x="8.5" y="0.5" width="6" height="6" rx="1.5" fill="#c2c2bb" />
           <rect x="0.5" y="8.5" width="6" height="6" rx="1.5" fill="#c2c2bb" />
@@ -67,10 +74,10 @@ export function UploadPanel({
         disabled={isSubmitting}
         aria-describedby="upload-file-help"
       >
-        {isSubmitting ? "Starting review…" : "Upload labels"}
+        {isSubmitting ? "Starting review..." : "Upload labels"}
       </button>
       <div className="upload-help" id="upload-file-help">
-        PNG, JPG or PDF · up to {config.maxBatchLabels}
+        PNG or JPG - up to {config.maxBatchLabels}
       </div>
       {configError ? <InlineMessage tone="warning">{configError}</InlineMessage> : null}
       {formError ? <InlineMessage tone="error">{formError}</InlineMessage> : null}

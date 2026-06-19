@@ -17,6 +17,7 @@ from app.models.verification import (
     VerificationStatus,
 )
 from app.providers.openrouter_provider import OpenRouterVerificationProvider
+from app.providers.local_provider import LocalModelVerificationProvider
 from app.providers.base import ProviderResult
 from app.services.batch_service import BatchService
 from app.services.result_guard_service import ResultGuardService
@@ -24,7 +25,6 @@ from app.services.verification_prompt_service import VerificationPromptService
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"test-png"
-PDF_BYTES = b"%PDF-1.4\ntest-pdf"
 
 
 def make_field(
@@ -39,7 +39,6 @@ def make_field(
         status=status,
         application_value=application_value,
         label_value=label_value,
-        confidence=1.0,
         reason=reason,
         evidence=evidence or [],
     )
@@ -183,6 +182,7 @@ def test_config_endpoint_exposes_safe_limits() -> None:
     assert body["provider_mode"] == "local"
     assert body["max_batch_labels"] == 400
     assert ".png" in body["allowed_file_types"]
+    assert ".pdf" not in body["allowed_file_types"]
     assert "openrouter_api_key" not in body
 
 
@@ -205,7 +205,7 @@ def test_verify_rejects_invalid_upload() -> None:
     )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Only PNG, JPG, JPEG, or PDF files can be uploaded."
+    assert response.json()["detail"] == "Only PNG, JPG, or JPEG files can be uploaded."
 
 
 def test_verify_uses_verification_service() -> None:
@@ -297,6 +297,24 @@ def test_openrouter_payload_sends_real_image_content() -> None:
     assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
 
 
+def test_local_provider_payload_sends_image_without_openrouter_plugins() -> None:
+    provider = LocalModelVerificationProvider(Settings(provider_mode="local"))
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    payload = provider._build_payload(upload=upload)
+
+    content = payload["messages"][1]["content"]
+    assert payload["model"] == "qwen2.5-vl-7b-instruct"
+    assert content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert "plugins" not in payload
+
+
 def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     provider = OpenRouterVerificationProvider(
         Settings(openrouter_api_key="test-key"),
@@ -321,24 +339,6 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "name_address" in prompt_text
     assert "country_of_origin" in prompt_text
     assert "government_warning" in prompt_text
-
-
-def test_openrouter_payload_sends_pdf_file_content() -> None:
-    provider = OpenRouterVerificationProvider(Settings(openrouter_api_key="test-key"))
-    upload = ValidatedUpload(
-        filename="sample.pdf",
-        content_type="application/pdf",
-        extension=".pdf",
-        content=PDF_BYTES,
-    )
-
-    payload = provider._build_payload(model="google/gemini-3.5-flash", upload=upload)
-
-    content = payload["messages"][1]["content"]
-    assert content[1]["type"] == "file"
-    assert content[1]["file"]["file_data"].startswith("data:application/pdf;base64,")
-    assert payload["plugins"][0]["id"] == "file-parser"
-    assert payload["plugins"][0]["pdf"]["engine"] == "mistral-ocr"
 
 
 def test_openrouter_parser_accepts_string_evidence_items() -> None:

@@ -229,16 +229,9 @@ docker compose up --build
 
 The selected model server must support vision inputs through OpenAI-compatible message content. Text-only local models will not work for label verification.
 
-### PDFs Fail Locally
-
-The current local provider sends PDFs using the same payload shape as the OpenRouter provider. OpenRouter has provider-specific PDF parsing support. Local OpenAI-compatible servers may reject PDFs or ignore the PDF content.
-
-For reliable local mode today, use PNG or JPG uploads. To make local PDF batches reliable, add a backend PDF-to-image conversion step before calling the local vision model.
-
 ## Current Local-Mode Limits
 
 - No API key is required.
 - A local model server is required.
 - PNG/JPG are the reliable local input types.
-- PDF support depends on the local model server and may need backend PDF rasterization.
 - Batch upload works through the app, but throughput depends on local hardware and `BATCH_CONCURRENCY`.

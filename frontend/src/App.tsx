@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DetailModal } from "./components/DetailModal";
-import { ResultsPanel } from "./components/ResultsPanel";
+import { matchesFilter, ResultsPanel } from "./components/ResultsPanel";
+import type { ResultFilter } from "./components/ResultsPanel";
 import { SamplePickerModal } from "./components/SamplePickerModal";
 import { UploadPanel } from "./components/UploadPanel";
 import { useAppConfig } from "./hooks/useAppConfig";
@@ -11,6 +12,7 @@ export function App() {
   const { items, statusCounts, formError, isSubmitting, handleFiles } =
     useVerificationQueue(config);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ResultFilter>("all");
   const [samplePickerOpen, setSamplePickerOpen] = useState(false);
   const [toast, setToast] = useState("");
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -21,7 +23,16 @@ export function App() {
     };
   }, []);
 
+  const filteredItems = useMemo(
+    () => items.filter((item) => matchesFilter(item, activeFilter)),
+    [items, activeFilter],
+  );
+
   const selectedItem = selectedIndex === null ? null : items[selectedIndex] ?? null;
+  const filteredSelectedIndex =
+    selectedItem === null
+      ? 0
+      : filteredItems.findIndex((item) => item.localId === selectedItem.localId);
 
   function openDetails(index: number) {
     setSelectedIndex(index);
@@ -32,16 +43,15 @@ export function App() {
   }
 
   function moveSelection(direction: -1 | 1) {
-    setSelectedIndex((currentIndex) => {
-      if (currentIndex === null) {
-        return currentIndex;
-      }
-      const nextIndex = currentIndex + direction;
-      if (nextIndex < 0 || nextIndex >= items.length) {
-        return currentIndex;
-      }
-      return nextIndex;
-    });
+    if (selectedIndex === null) return;
+    const currentItem = items[selectedIndex];
+    const posInFiltered = filteredItems.findIndex((item) => item.localId === currentItem?.localId);
+    if (posInFiltered === -1) return;
+    const nextPosInFiltered = posInFiltered + direction;
+    if (nextPosInFiltered < 0 || nextPosInFiltered >= filteredItems.length) return;
+    const nextItem = filteredItems[nextPosInFiltered];
+    const nextIndex = items.findIndex((item) => item.localId === nextItem.localId);
+    if (nextIndex >= 0) setSelectedIndex(nextIndex);
   }
 
   function shiftSelectionForNewFiles(count: number) {
@@ -85,7 +95,10 @@ export function App() {
         <main className="main-area">
           <ResultsPanel
             items={items}
+            filteredItems={filteredItems}
             statusCounts={statusCounts}
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
             onOpenDetails={openDetails}
             onOpenSamplePicker={() => setSamplePickerOpen(true)}
           />
@@ -95,8 +108,8 @@ export function App() {
       {selectedItem ? (
         <DetailModal
           item={selectedItem}
-          currentIndex={selectedIndex ?? 0}
-          totalItems={items.length}
+          currentIndex={filteredSelectedIndex}
+          totalItems={filteredItems.length}
           onClose={closeDetails}
           onMove={moveSelection}
         />

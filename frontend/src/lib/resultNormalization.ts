@@ -1,5 +1,5 @@
 import { FIELD_DEFS, type BatchItem, type FieldSummary, type UiStatus } from "../types/verification";
-import { camelCase, formatConfidence, formatTimestamp } from "./format";
+import { camelCase, formatTimestamp } from "./format";
 import {
   findArray,
   findNestedRecord,
@@ -183,10 +183,6 @@ function extractFieldSummaries(source: unknown): FieldSummary[] {
       labelValue:
         findString(fieldSource, ["label_value", "labelValue", "observed_value", "observed", "value"]) ??
         "Not provided",
-      confidence: formatConfidence(
-        findNumber(fieldSource, ["confidence", "score"]) ??
-          findNumber(source, [`${definition.key}_confidence`]),
-      ),
       reason:
         findString(fieldSource, ["reason", "message", "notes", "detail"]) ??
         findString(source, [`${definition.key}_reason`]) ??

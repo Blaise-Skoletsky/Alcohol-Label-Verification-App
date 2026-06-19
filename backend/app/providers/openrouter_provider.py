@@ -1,4 +1,3 @@
-import json
 import time
 from base64 import b64encode
 
@@ -6,27 +5,9 @@ import httpx
 
 from app.core.settings import Settings
 from app.models.uploads import ValidatedUpload
-from app.models.verification import (
-    ModelMetadata,
-    VerificationEvidence,
-    VerificationFieldResult,
-    VerificationFields,
-    VerificationStatus,
-)
 from app.providers.base import ProviderError, ProviderResult
+from app.providers.chat_completion_parser import parse_chat_completion_response
 from app.services.verification_prompt_service import VerificationPromptService
-
-
-VERIFICATION_FIELD_NAMES = (
-    "artifact_legibility",
-    "brand_name",
-    "class_type_designation",
-    "alcohol_content",
-    "net_contents",
-    "name_address",
-    "country_of_origin",
-    "government_warning",
-)
 
 
 class OpenRouterVerificationProvider:
@@ -123,21 +104,10 @@ class OpenRouterVerificationProvider:
             "max_tokens": 1800,
             "stream": False,
         }
-        if upload.extension == ".pdf":
-            payload["plugins"] = [{"id": "file-parser", "pdf": {"engine": "mistral-ocr"}}]
         return payload
 
     def _build_artifact_part(self, upload: ValidatedUpload) -> dict:
         encoded = b64encode(upload.content).decode("ascii")
-        if upload.extension == ".pdf":
-            return {
-                "type": "file",
-                "file": {
-                    "filename": upload.filename,
-                    "file_data": f"data:application/pdf;base64,{encoded}",
-                },
-            }
-
         mime_type = "image/png" if upload.extension == ".png" else "image/jpeg"
         return {
             "type": "image_url",
@@ -153,53 +123,11 @@ class OpenRouterVerificationProvider:
         started: float,
         attempted_models: list[str],
     ) -> ProviderResult:
-        try:
-            body = response.json()
-            content = body["choices"][0]["message"]["content"]
-            parsed = json.loads(content) if isinstance(content, str) else content
-            fields = self._parse_fields(parsed["fields"])
-            duration_ms = int((time.perf_counter() - started) * 1000)
-            return ProviderResult(
-                status=VerificationStatus(parsed["status"]),
-                summary=parsed["summary"],
-                fields=fields,
-                model=ModelMetadata(
-                    provider=self._provider_name,
-                    model=model,
-                    provider_mode=self._settings.provider_mode,
-                    duration_ms=duration_ms,
-                    fallback_attempts=max(0, len(attempted_models) - 1),
-                    attempted_models=attempted_models,
-                ),
-            )
-        except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-            raise ProviderError(
-                "The verification service returned an unreadable response. Please try again."
-            ) from exc
-
-    def _parse_fields(self, raw_fields: dict) -> VerificationFields:
-        def build_field(field_name: str) -> VerificationFieldResult:
-            field = raw_fields[field_name]
-            evidence = [self._parse_evidence_item(item) for item in field.get("evidence", [])]
-            return VerificationFieldResult(
-                status=field["status"],
-                application_value=field.get("application_value"),
-                label_value=field.get("label_value") or field.get("extracted_value"),
-                confidence=field.get("confidence"),
-                reason=field.get("reason") or field.get("explanation", ""),
-                evidence=evidence,
-            )
-
-        return VerificationFields(
-            **{field_name: build_field(field_name) for field_name in VERIFICATION_FIELD_NAMES}
+        return parse_chat_completion_response(
+            response=response,
+            model=model,
+            provider_name=self._provider_name,
+            provider_mode=self._settings.provider_mode,
+            started=started,
+            attempted_models=attempted_models,
         )
-
-    def _parse_evidence_item(self, item: object) -> VerificationEvidence:
-        if isinstance(item, str):
-            return VerificationEvidence(summary=item)
-        if isinstance(item, dict):
-            return VerificationEvidence(
-                summary=str(item.get("summary") or item.get("text") or item.get("message") or ""),
-                source_excerpt=item.get("source_excerpt") or item.get("excerpt"),
-            )
-        return VerificationEvidence(summary=str(item))

@@ -1,13 +1,3 @@
-export function formatConfidence(value?: number | null) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "Not available";
-  }
-  if (value <= 1) {
-    return `${Math.round(value * 100)}%`;
-  }
-  return `${Math.round(value)}%`;
-}
-
 export function clampNumber(value: unknown, fallback: number) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }

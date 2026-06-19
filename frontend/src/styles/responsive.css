@@ -1,0 +1,87 @@
+﻿/* ============ RESPONSIVE ============ */
+@media (max-width: 980px) {
+  .slideover {
+    flex-direction: column;
+  }
+
+  .slideover-figure {
+    flex: 0 0 auto;
+    height: 38vh;
+    border-right: none;
+    border-bottom: 1px solid #efefea;
+    padding: 18px;
+  }
+
+  .slideover-content {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 880px) {
+  .console {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid #eaeae4;
+  }
+
+  .sidebar-upload {
+    margin-top: 18px;
+  }
+
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .main-header,
+  .stats-row,
+  .filter-pills,
+  .table-region {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .main-header-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .info-button {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .table-head {
+    display: none;
+  }
+
+  .result-row {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "label status"
+      "checks time";
+    row-gap: 10px;
+  }
+
+  .row-label {
+    grid-area: label;
+  }
+  .row-status {
+    grid-area: status;
+    justify-self: end;
+  }
+  .row-checks {
+    grid-area: checks;
+  }
+  .row-time {
+    grid-area: time;
+    align-self: center;
+  }
+}

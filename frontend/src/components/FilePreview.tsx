@@ -7,7 +7,6 @@ type FilePreviewProps = {
 };
 
 export function FilePreview({ item }: FilePreviewProps) {
-  const isPdf = item.mimeType === "application/pdf" || item.fileName.toLowerCase().endsWith(".pdf");
   const [zoomed, setZoomed] = useState(false);
 
   // Close the zoom lightbox on Escape. Capture phase + stopPropagation keeps the
@@ -25,14 +24,6 @@ export function FilePreview({ item }: FilePreviewProps) {
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [zoomed]);
-
-  if (isPdf) {
-    return (
-      <div className="slideover-figure-media">
-        <iframe title={item.fileName} src={item.previewUrl} className="slideover-figure-embed" />
-      </div>
-    );
-  }
 
   return (
     <div className="slideover-figure-media">

@@ -4,18 +4,18 @@ This document describes how the prototype should behave at runtime. The proposal
 
 # Runtime Flow
 
-- The user uploads one image or PDF page per verification item.
+- The user uploads one PNG or JPG image per verification item.
 - Each uploaded item must contain both the label application and the label artwork in the same visual artifact.
 - The frontend sends the combined application+label file to FastAPI.
 - The frontend does not call model providers directly.
 - FastAPI validates file type and file size before processing.
 - The backend calls the configured vision provider with the combined application+label artifact.
 - The model must identify when the application portion or label artwork portion is missing, unreadable, or ambiguous.
-- The model returns structured JSON containing extracted values, pass/fail/needs-review statuses, confidence, and evidence.
+- The model returns structured JSON containing extracted values, pass/fail/needs-review statuses, reasons, and evidence.
 - The backend normalizes and validates the model output before returning a result to the UI.
 - The UI shows a compact result summary first, with visible evidence available for each field.
 - The UI may keep recent client-side history in browser storage for up to one day. This history must not require server-side persistence.
-- Supported combined application+label file types for the prototype are PNG, JPG/JPEG, and PDF.
+- Supported combined application+label file types for the prototype are PNG and JPG/JPEG.
 - The demo flow is stateless and does not require accounts or per-user server-side history.
 
 # UI and User Experience
@@ -51,7 +51,7 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
   - Green/pass when the field matches.
   - Red/fail when the field does not match.
   - Yellow/needs-review when the system cannot confidently decide.
-- The detail view must make the evidence visible: extracted label value, application value, confidence, and reason.
+- The detail view must make the evidence visible: extracted label value, application value, reason, and supporting evidence.
 - The detail view should not hide failed or needs-review fields behind extra clicks.
 
 ## Navigation

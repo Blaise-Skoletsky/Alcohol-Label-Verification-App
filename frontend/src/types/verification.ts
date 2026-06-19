@@ -20,7 +20,6 @@ export type FieldSummary = {
   status: UiStatus;
   applicationValue: string;
   labelValue: string;
-  confidence: string;
   reason: string;
   evidence: string[];
 };

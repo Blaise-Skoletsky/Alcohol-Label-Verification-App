@@ -24,7 +24,6 @@ class VerificationFieldResult(BaseModel):
     status: Literal["pass", "fail", "needs_review"]
     application_value: str | None = None
     label_value: str | None = None
-    confidence: float | None = None
     reason: str
     evidence: list[VerificationEvidence] = Field(default_factory=list)
 

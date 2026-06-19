@@ -15,6 +15,6 @@ export type ConfigResponse = Partial<{
 export const DEFAULT_CONFIG: AppConfig = {
   maxUploadMb: 20,
   maxBatchLabels: 25,
-  allowedFileTypes: [".png", ".jpg", ".jpeg", ".pdf"],
+  allowedFileTypes: [".png", ".jpg", ".jpeg"],
   providerMode: "local",
 };
