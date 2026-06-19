@@ -149,8 +149,13 @@ function matchLocalItem(record: unknown, index: number, existingItems: BatchItem
 // (most notably `alcohol_content` for what the UI calls "abv"). Map each UI
 // field to every API key it may arrive under so real results populate.
 const FIELD_SOURCE_KEYS: Record<FieldSummary["key"], string[]> = {
+  artifact_legibility: ["artifact_legibility", "artifactLegibility", "legibility"],
   brand_name: ["brand_name", "brandName", "brand"],
-  abv: ["abv", "alcohol_content", "alcoholContent", "alcohol"],
+  class_type_designation: ["class_type_designation", "classTypeDesignation", "class_type", "classType"],
+  alcohol_content: ["alcohol_content", "alcoholContent", "abv", "alcohol"],
+  net_contents: ["net_contents", "netContents", "net_content", "contents"],
+  name_address: ["name_address", "nameAddress", "name_and_address", "nameAndAddress"],
+  country_of_origin: ["country_of_origin", "countryOfOrigin", "country"],
   government_warning: ["government_warning", "governmentWarning", "warning"],
 };
 

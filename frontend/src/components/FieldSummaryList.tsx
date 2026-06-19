@@ -1,5 +1,5 @@
 import { isPendingStatus } from "../lib/status";
-import type { BatchItem, UiStatus } from "../types/verification";
+import type { BatchItem, FieldSummary, UiStatus } from "../types/verification";
 import { InlineMessage } from "./InlineMessage";
 import { StatusPill } from "./StatusPill";
 
@@ -31,20 +31,26 @@ export function FieldSummaryList({ item }: FieldSummaryListProps) {
               <StatusPill status={displayDecisionStatus(field.status)} />
             </div>
             <div className="field-values">
-              <div className="field-value-box">
-                <div className="field-value-label">Application</div>
-                <div className="field-value">{field.applicationValue}</div>
-              </div>
-              <div className="field-value-box">
+              {field.key !== "government_warning" && (
+                <div className="field-value-box">
+                  <div className="field-value-label">Application</div>
+                  <div className="field-value">
+                    {field.key === "artifact_legibility"
+                      ? legibilityLabel(field.applicationValue, field.status)
+                      : field.applicationValue}
+                  </div>
+                </div>
+              )}
+              <div className={`field-value-box${field.key === "government_warning" ? " field-value-box--full" : ""}`}>
                 <div className="field-value-label">On label</div>
-                <div className="field-value">{field.labelValue}</div>
+                <div className="field-value">
+                  {field.key === "artifact_legibility"
+                    ? legibilityLabel(field.labelValue, field.status)
+                    : field.labelValue}
+                </div>
               </div>
             </div>
             <p className="field-reason">{field.reason}</p>
-            <div className="field-confidence">
-              <span className="field-confidence-label">Confidence</span>
-              <span className="field-confidence-value">{field.confidence}</span>
-            </div>
           </article>
         ))}
       </div>
@@ -56,6 +62,12 @@ export function FieldSummaryList({ item }: FieldSummaryListProps) {
       ) : null}
     </section>
   );
+}
+
+function legibilityLabel(raw: string, status: FieldSummary["status"]): string {
+  if (status === "pass") return "Legible";
+  if (status === "fail") return "Illegible";
+  return "Unclear";
 }
 
 function displayDecisionStatus(status: UiStatus): "pass" | "needs-review" | "fail" {

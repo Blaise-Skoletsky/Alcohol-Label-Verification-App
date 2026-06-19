@@ -74,7 +74,7 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
 - Batch upload supports up to the configured maximum item count, initially 400 combined application+label files in one user action.
 - Batch submission returns quickly with a batch identifier instead of blocking until all labels finish.
 - Each batch item is processed as an independent job with its own status and result.
-- Provider calls pass through a bounded queue controlled by `BATCH_CONCURRENCY`, with an initial target of five concurrent model calls.
+- Provider calls pass through a bounded queue with an initial application default of five concurrent model calls.
 - The queue must prevent large-batch fanout, including hundreds of simultaneous OpenRouter calls in cloud mode.
 - The first processing wave should be small enough to return initial results within the single-label latency target when the provider is healthy.
 - Batch results must be shown incrementally as each item completes. The UI must not wait for the entire batch before showing the first successful, failed, or needs-review result.

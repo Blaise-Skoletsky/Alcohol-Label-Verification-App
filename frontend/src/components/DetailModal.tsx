@@ -4,7 +4,6 @@ import { getItemBrand, verdictTitle } from "../lib/itemDisplay";
 import type { BatchItem } from "../types/verification";
 import { FieldSummaryList } from "./FieldSummaryList";
 import { FilePreview } from "./FilePreview";
-import { LabelThumbnail } from "./LabelThumbnail";
 
 type DetailModalProps = {
   item: BatchItem;
@@ -50,60 +49,60 @@ export function DetailModal({
         aria-label="Verification details"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="slideover-header">
-          <div className="slideover-heading">
-            <LabelThumbnail item={item} />
-            <div className="slideover-titles">
-              <div className="slideover-brand" title={brand}>
+        <div className="slideover-figure">
+          <div className="figure-header">
+            <div className="figure-title-row">
+              <div className="figure-title" title={brand}>
                 {brand}
               </div>
-              <div className="slideover-file" title={item.fileName}>
-                {item.fileName}
-              </div>
+              <span className={`status-pill verdict-chip tone-${tone}`}>
+                <span className={`status-pill-dot tone-${tone}`} aria-hidden="true" />
+                {verdictTitle(item.status)}
+              </span>
             </div>
+            <div className="figure-summary">{item.summary}</div>
           </div>
-          <button
-            type="button"
-            className="slideover-close"
-            onClick={onClose}
-            aria-label="Close details"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div className="slideover-body">
-          <div className={`verdict-banner tone-${tone}`}>
-            <span className={`verdict-dot tone-${tone}`} aria-hidden="true" />
-            <div>
-              <div className="verdict-title">{verdictTitle(item.status)}</div>
-              <div className="verdict-summary">{item.summary}</div>
-            </div>
-          </div>
-
           <FilePreview item={item} />
-
-          <FieldSummaryList item={item} />
         </div>
 
-        <footer className="slideover-footer">
-          <button
-            type="button"
-            className="slideover-prev"
-            onClick={() => onMove(-1)}
-            disabled={currentIndex === 0}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="slideover-next"
-            onClick={() => onMove(1)}
-            disabled={currentIndex === totalItems - 1}
-          >
-            Next label
-          </button>
-        </footer>
+        <div className="slideover-content">
+          <header className="slideover-header">
+            <div className="slideover-file" title={item.fileName}>
+              {item.fileName}
+            </div>
+            <button
+              type="button"
+              className="slideover-close"
+              onClick={onClose}
+              aria-label="Close details"
+            >
+              ✕
+            </button>
+          </header>
+
+          <div className="slideover-body">
+            <FieldSummaryList item={item} />
+          </div>
+
+          <footer className="slideover-footer">
+            <button
+              type="button"
+              className="slideover-prev"
+              onClick={() => onMove(-1)}
+              disabled={currentIndex === 0}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              className="slideover-next"
+              onClick={() => onMove(1)}
+              disabled={currentIndex === totalItems - 1}
+            >
+              Next label
+            </button>
+          </footer>
+        </div>
       </section>
     </div>
   );

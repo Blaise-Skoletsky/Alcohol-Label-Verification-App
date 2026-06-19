@@ -57,9 +57,16 @@ class VerificationPromptService:
             "7. country_of_origin: for imports, verify country of origin appears and matches the "
             "application. For clearly domestic products, pass when no import country-of-origin "
             "statement is required.\n"
-            "8. government_warning: verify the required statement strictly when readable, including "
-            "the GOVERNMENT WARNING: prefix and capitalization. Partial or approximate warning text "
-            "must not pass.\n\n"
+            "8. government_warning: verify the following exact federal statement appears in full on "
+            "the label artwork. Do not extract application_value from the artifact — always set it to "
+            "the verbatim required text below. Set label_value to exactly what appears on the label "
+            "(or 'Not present' if absent, or 'Partially legible' if obscured). "
+            "Pass only if the full statement is present and readable. Fail if clearly absent. "
+            "Use needs_review if partially obscured or unreadable. "
+            "Required text: GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD "
+            "NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. "
+            "(2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE "
+            "MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.\n\n"
             "Status rules:\n"
             "- Use pass only when you extracted the application value and the label value from the correct "
             "regions and they satisfy the field rule.\n"
@@ -81,7 +88,7 @@ class VerificationPromptService:
             '"net_contents":{"status":"pass|fail|needs_review","application_value":"...","label_value":"...","confidence":0.0,"reason":"short internal note","evidence":[]},'
             '"name_address":{"status":"pass|fail|needs_review","application_value":"...","label_value":"...","confidence":0.0,"reason":"short internal note","evidence":[]},'
             '"country_of_origin":{"status":"pass|fail|needs_review","application_value":"...","label_value":"...","confidence":0.0,"reason":"short internal note","evidence":[]},'
-            '"government_warning":{"status":"pass|fail|needs_review","application_value":"...","label_value":"...","confidence":0.0,"reason":"short internal note","evidence":[]}'
+            '"government_warning":{"status":"pass|fail|needs_review","application_value":"GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.","label_value":"<what appears on label or Not present>","confidence":0.0,"reason":"short internal note","evidence":[]}'
             "}"
             "}"
         )

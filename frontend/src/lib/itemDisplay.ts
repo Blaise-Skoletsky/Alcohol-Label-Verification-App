@@ -2,8 +2,13 @@ import type { BatchItem, FieldSummary, UiStatus } from "../types/verification";
 
 // Short labels used for the per-row mini-checks in the table.
 export const FIELD_SHORT_LABELS: Record<FieldSummary["key"], string> = {
+  artifact_legibility: "Legibility",
   brand_name: "Brand",
-  abv: "ABV",
+  class_type_designation: "Class/type",
+  alcohol_content: "ABV",
+  net_contents: "Net contents",
+  name_address: "Name/address",
+  country_of_origin: "Origin",
   government_warning: "Warning",
 };
 

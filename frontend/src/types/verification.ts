@@ -7,7 +7,15 @@ export type UiStatus =
   | "processing-error";
 
 export type FieldSummary = {
-  key: "brand_name" | "abv" | "government_warning";
+  key:
+    | "artifact_legibility"
+    | "brand_name"
+    | "class_type_designation"
+    | "alcohol_content"
+    | "net_contents"
+    | "name_address"
+    | "country_of_origin"
+    | "government_warning";
   label: string;
   status: UiStatus;
   applicationValue: string;
@@ -37,6 +45,11 @@ export type BatchItem = {
 
 export const FIELD_DEFS: Array<{ key: FieldSummary["key"]; label: string }> = [
   { key: "brand_name", label: "Brand name" },
-  { key: "abv", label: "ABV" },
   { key: "government_warning", label: "Government warning" },
+  { key: "alcohol_content", label: "Alcohol content" },
+  { key: "net_contents", label: "Net contents" },
+  { key: "class_type_designation", label: "Class/type designation" },
+  { key: "name_address", label: "Name & address" },
+  { key: "country_of_origin", label: "Country of origin" },
+  { key: "artifact_legibility", label: "Artifact legibility" },
 ];

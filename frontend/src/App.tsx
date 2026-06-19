@@ -52,11 +52,6 @@ export function App() {
               <span className="nav-marker" aria-hidden="true" />
               Open Applications
             </span>
-            <span className="nav-item" aria-disabled="true">
-              <span className="nav-marker" aria-hidden="true" />
-              History
-              <span className="nav-badge">SOON</span>
-            </span>
           </nav>
 
           <div className="sidebar-upload">
