@@ -339,6 +339,8 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "name_address" in prompt_text
     assert "country_of_origin" in prompt_text
     assert "government_warning" in prompt_text
+    assert "Never return needs_review for government_warning" in prompt_text
+    assert '"government_warning":        {"status":"pass|fail",' in prompt_text
 
 
 def test_openrouter_parser_accepts_string_evidence_items() -> None:

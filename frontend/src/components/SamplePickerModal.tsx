@@ -7,7 +7,6 @@ interface SampleEntry {
   id: string;
   brand: string;
   file: string;
-  cat: SampleCategory;
   desc: string;
 }
 
@@ -16,99 +15,79 @@ const SAMPLES: SampleEntry[] = [
     id: "casa",
     brand: "Casamigos Tequila",
     file: "pass/casamigos_glare_readable.png",
-    cat: "pass",
     desc: "Expected pass: spirits label with readable brand, class, alcohol content, net contents, origin, and warning text.",
-  },
-  {
-    id: "m47b",
-    brand: "Monkey 47 Dry Gin",
-    file: "pass/monkey_47.png",
-    cat: "pass",
-    desc: "Expected pass: imported gin label with complete mandatory label details and readable application values.",
   },
   {
     id: "coyam",
     brand: "Coyam (Chile)",
     file: "pass/coyam.png",
-    cat: "pass",
     desc: "Expected pass: wine label with matching brand, origin, contents, and required warning information.",
   },
   {
     id: "nat",
     brand: "Natura Cabernet",
     file: "pass/natura.png",
-    cat: "pass",
     desc: "Expected pass: original Natura label includes the required government warning and supporting label details.",
   },
   {
     id: "gek",
     brand: "Gekkeikan Sake",
     file: "pass/gekkeikan_low_light_readable.png",
-    cat: "pass",
     desc: "Expected pass: original sake label is readable and includes the expected class, contents, importer, and warning details.",
   },
   {
     id: "chick",
     brand: "Chicken Dinner Red",
     file: "pass/chicken_dinner.png",
-    cat: "pass",
     desc: "Expected pass: original Chicken Dinner label includes readable front/back labels and the required warning block.",
   },
   {
     id: "mid",
     brand: "Midnight Moon",
     file: "pass/midnight_moon.png",
-    cat: "pass",
     desc: "Expected pass: original spirits label has readable application and label evidence for required checks.",
   },
   {
     id: "casa-glare",
     brand: "Casamigos Tequila",
     file: "pass/casamigos_glare_readable.png",
-    cat: "pass",
     desc: "Expected pass: the photo has glare, but the required label text is still readable enough to verify.",
   },
   {
     id: "gekkeikan-lighting",
     brand: "Gekkeikan Sake",
     file: "pass/gekkeikan_low_light_readable.png",
-    cat: "pass",
     desc: "Expected pass: lighting is dim, but the label and application values remain readable enough to verify.",
   },
   {
     id: "jd",
     brand: "Jack Daniel's Winter Jack",
     file: "pass/jack_daniels_winter_jack.png",
-    cat: "pass",
     desc: "Expected pass: application says distilled spirits; label says Tennessee cider, a blend using Tennessee whiskey.",
   },
   {
     id: "mack",
     brand: "Mackinaw Trail",
     file: "fail/mackinaw_trail.png",
-    cat: "fail",
     desc: "Expected fail: the label evidence is missing or unclear for at least one required verification field.",
   },
   {
     id: "chick-warning",
     brand: "Chicken Dinner Red",
     file: "fail/chicken_dinner_fail_incorrect_government_warning.png",
-    cat: "fail",
     desc: "Expected fail: the government warning block was changed to incorrect, non-compliant warning language.",
   },
   {
     id: "natura-warning",
     brand: "Natura Cabernet",
     file: "fail/natura_fail_missing_government_warning.png",
-    cat: "fail",
     desc: "Expected fail: the government warning paragraph is missing from the label artwork.",
   },
   {
     id: "monkey-rotated",
     brand: "Monkey 47 Dry Gin",
-    file: "fail/monkey_47_fail_rotated_label.png",
-    cat: "fail",
-    desc: "Expected fail: artifact legibility fails because the application is straight but the embedded label images are rotated and not reviewable.",
+    file: "pass/monkey_47_rotated_label.png",
+    desc: "Expected pass: the rotated embedded label images remain readable enough to verify the required application and label evidence.",
   },
 ];
 
@@ -122,6 +101,14 @@ const FILTER_DEFS: { key: FilterKey; label: string }[] = [
   { key: "pass", label: "Should pass" },
   { key: "fail", label: "Should fail" },
 ];
+
+function getSampleCategory(sample: SampleEntry): SampleCategory {
+  const folder = sample.file.split("/", 1)[0];
+  if (folder === "pass" || folder === "fail") {
+    return folder;
+  }
+  throw new Error(`Sample label must live under pass/ or fail/: ${sample.file}`);
+}
 
 type Props = {
   open: boolean;
@@ -148,11 +135,12 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
 
   const counts: Record<FilterKey, number> = {
     all: SAMPLES.length,
-    pass: SAMPLES.filter((sample) => sample.cat === "pass").length,
-    fail: SAMPLES.filter((sample) => sample.cat === "fail").length,
+    pass: SAMPLES.filter((sample) => getSampleCategory(sample) === "pass").length,
+    fail: SAMPLES.filter((sample) => getSampleCategory(sample) === "fail").length,
   };
 
-  const visible = filter === "all" ? SAMPLES : SAMPLES.filter((sample) => sample.cat === filter);
+  const visible =
+    filter === "all" ? SAMPLES : SAMPLES.filter((sample) => getSampleCategory(sample) === filter);
 
   function toggle(id: string) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id]));
@@ -237,6 +225,7 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
           <div className="sample-grid">
             {visible.map((entry) => {
               const isSelected = selected.includes(entry.id);
+              const category = getSampleCategory(entry);
               return (
                 <button
                   key={entry.id}
@@ -263,8 +252,8 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
                   <div className="sample-card-body">
                     <div className="sample-card-title-row">
                       <span className="sample-card-brand">{entry.brand}</span>
-                      <span className={`sample-cat-badge ${entry.cat}`}>
-                        {BADGE_LABELS[entry.cat]}
+                      <span className={`sample-cat-badge ${category}`}>
+                        {BADGE_LABELS[category]}
                       </span>
                     </div>
                     <div className="sample-card-file">{entry.file.split("/").pop()}</div>

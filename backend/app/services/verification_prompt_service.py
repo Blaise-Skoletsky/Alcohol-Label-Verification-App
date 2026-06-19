@@ -100,8 +100,10 @@ way that limits specific field extractions. Note which areas are affected.
 FAIL: The image is so degraded that no meaningful extraction is possible, or the document is \
 clearly not an alcohol label application.
 
-Cascade rule: if artifact_legibility is needs_review or fail, all other fields must also be \
-needs_review — do not pass or fail any other field when the artifact cannot be reliably read."""
+Cascade rule: if artifact_legibility is needs_review or fail, all other fields except \
+government_warning must also be needs_review — do not pass or fail those other fields when the \
+artifact cannot be reliably read. Government warning is always binary: if the required warning \
+cannot be confirmed in full, government_warning must be fail."""
 
     # ------------------------------------------------------------------
     # Field 2: brand_name
@@ -292,17 +294,17 @@ the application."""
             "Same rule for all beverage classes. Do not extract application_value from the "
             "artifact — always set it to the verbatim required text below. Set label_value to "
             "exactly what appears on the label (or 'Not present' if absent, or "
-            "'Partially legible' if obscured).\n\n"
+            "'Unreadable or incomplete' if obscured).\n\n"
+            "This field has only two allowed statuses: pass or fail. Never return needs_review "
+            "for government_warning.\n\n"
             f"Required text: {required_text}\n\n"
             "PASS: The complete statement appears on the label — all words present in correct "
             "order. Minor OCR variance in capitalization or spacing is acceptable, but every "
             "word must be present.\n\n"
-            "NEEDS REVIEW: Statement is partially visible or legible — some words are present "
-            "but the statement is obscured, cut off, or too low-resolution to confirm it is "
-            "complete.\n\n"
-            "FAIL: Statement is not word for word identical to the required government warning, or statement is entirely absent from the label; one of the two numbered "
-            "sentences is completely missing; the statement is clearly truncated beyond what "
-            "could be called partial legibility."
+            "FAIL: The statement is absent, partially visible, partially legible, obscured, cut "
+            "off, too low-resolution to confirm, incomplete, truncated, altered, paraphrased, "
+            "missing either numbered sentence, or not word-for-word identical to the required "
+            "government warning."
         )
 
     # ------------------------------------------------------------------
@@ -338,9 +340,9 @@ the application."""
             f'    "name_address":              {{{field_shape}}},\n'
             f'    "country_of_origin":         {{{field_shape}}},\n'
             '    "government_warning":        {'
-            '"status":"pass|fail|needs_review",'
+            '"status":"pass|fail",'
             f'"application_value":"{gov_warning}",'
-            '"label_value":"<what appears on label, Not present, or Partially legible>",'
+            '"label_value":"<what appears on label, Not present, or Unreadable or incomplete>",'
             '"reason":"short internal note",'
             '"evidence":[]'
             "}\n"
