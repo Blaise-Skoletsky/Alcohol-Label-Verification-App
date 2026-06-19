@@ -50,15 +50,15 @@ export function UploadPanel({
       />
       <button
         type="button"
-        className="primary-button"
+        className="upload-button"
         onClick={() => inputRef.current?.click()}
         disabled={isSubmitting}
         aria-describedby="upload-file-help"
       >
-        {isSubmitting ? "Starting review..." : "Upload applications"}
+        {isSubmitting ? "Starting review…" : "Upload labels"}
       </button>
-      <div className="upload-meta" id="upload-file-help">
-        PNG, JPG, JPEG, or PDF. Up to {config.maxBatchLabels} applications, {config.maxUploadMb} MB each.
+      <div className="upload-help" id="upload-file-help">
+        PNG, JPG or PDF · up to {config.maxBatchLabels}
       </div>
       {configError ? <InlineMessage tone="warning">{configError}</InlineMessage> : null}
       {formError ? <InlineMessage tone="error">{formError}</InlineMessage> : null}

@@ -1,4 +1,4 @@
-import { isPendingStatus, STATUS_LABELS } from "../lib/status";
+import { isPendingStatus } from "../lib/status";
 import type { BatchItem, UiStatus } from "../types/verification";
 import { InlineMessage } from "./InlineMessage";
 import { StatusPill } from "./StatusPill";
@@ -8,48 +8,48 @@ type FieldSummaryListProps = {
 };
 
 export function FieldSummaryList({ item }: FieldSummaryListProps) {
-  const isPending = isPendingStatus(item.status);
+  if (isPendingStatus(item.status)) {
+    return (
+      <div className="checking-note">
+        <span className="checking-dot" aria-hidden="true" />
+        <p>
+          This label is still being checked. Leave the panel open and the results will appear as
+          soon as the review finishes.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <section className="detail-panel">
-      <div className="detail-section">
-        <h3>Field summary</h3>
-        {isPending ? (
-          <div className="waiting-panel">
-            <span className="spinner" aria-hidden="true" />
-            <div>
-              <strong>{STATUS_LABELS[item.status]}</strong>
-              <p>
-                This file is still being reviewed. Leave this window open and it will update when
-                the result arrives.
-              </p>
+    <section className="checks-section">
+      <div className="section-eyebrow">Checks</div>
+      <div className="field-list">
+        {item.fields.map((field) => (
+          <article key={field.key} className="field-card">
+            <div className="field-card-header">
+              <span className="field-title">{field.label}</span>
+              <StatusPill status={displayDecisionStatus(field.status)} />
             </div>
-          </div>
-        ) : (
-          <div className="field-list">
-            {item.fields.map((field) => (
-              <article key={field.key} className="field-card">
-                <div className="field-card-header">
-                  <h4>{field.label}</h4>
-                  <StatusPill status={displayDecisionStatus(field.status)} />
-                </div>
-                <dl className="field-grid">
-                  <div>
-                    <dt>Application value</dt>
-                    <dd>{field.applicationValue}</dd>
-                  </div>
-                  <div>
-                    <dt>Label value</dt>
-                    <dd>{field.labelValue}</dd>
-                  </div>
-                </dl>
-              </article>
-            ))}
-          </div>
-        )}
+            <div className="field-values">
+              <div className="field-value-box">
+                <div className="field-value-label">Application</div>
+                <div className="field-value">{field.applicationValue}</div>
+              </div>
+              <div className="field-value-box">
+                <div className="field-value-label">On label</div>
+                <div className="field-value">{field.labelValue}</div>
+              </div>
+            </div>
+            <p className="field-reason">{field.reason}</p>
+            <div className="field-confidence">
+              <span className="field-confidence-label">Confidence</span>
+              <span className="field-confidence-value">{field.confidence}</span>
+            </div>
+          </article>
+        ))}
       </div>
 
-      {!isPending && item.errorMessage ? (
+      {item.errorMessage ? (
         <InlineMessage tone="error" className="plain-detail">
           {item.errorMessage}
         </InlineMessage>

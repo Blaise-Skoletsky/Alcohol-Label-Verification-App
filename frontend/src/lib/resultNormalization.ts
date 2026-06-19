@@ -145,6 +145,15 @@ function matchLocalItem(record: unknown, index: number, existingItems: BatchItem
   return existingItems[index];
 }
 
+// The API exposes more granular field names than the three the UI tracks
+// (most notably `alcohol_content` for what the UI calls "abv"). Map each UI
+// field to every API key it may arrive under so real results populate.
+const FIELD_SOURCE_KEYS: Record<FieldSummary["key"], string[]> = {
+  brand_name: ["brand_name", "brandName", "brand"],
+  abv: ["abv", "alcohol_content", "alcoholContent", "alcohol"],
+  government_warning: ["government_warning", "governmentWarning", "warning"],
+};
+
 function extractFieldSummaries(source: unknown): FieldSummary[] {
   const container =
     findRecord(source, ["fields", "checks", "requirements", "summary"]) ??
@@ -152,7 +161,9 @@ function extractFieldSummaries(source: unknown): FieldSummary[] {
 
   return FIELD_DEFS.map((definition) => {
     const fieldSource =
-      findNestedRecord(container, definition.key) ??
+      FIELD_SOURCE_KEYS[definition.key]
+        .map((key) => findNestedRecord(container, key))
+        .find((record) => record !== null) ??
       findNestedRecord(container, camelCase(definition.key)) ??
       findNestedRecord(container, definition.label.toLowerCase().replace(/\s+/g, "_"));
     const status = normalizeFieldStatus(fieldSource, source);

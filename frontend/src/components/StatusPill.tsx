@@ -1,4 +1,5 @@
-import { STATUS_LABELS, STATUS_TONES } from "../lib/status";
+import { STATUS_TONES } from "../lib/status";
+import { STATUS_DISPLAY_LABELS } from "../lib/itemDisplay";
 import type { UiStatus } from "../types/verification";
 
 type StatusPillProps = {
@@ -6,6 +7,12 @@ type StatusPillProps = {
   label?: string;
 };
 
-export function StatusPill({ status, label = STATUS_LABELS[status] }: StatusPillProps) {
-  return <span className={`status-pill ${STATUS_TONES[status]}`}>{label}</span>;
+export function StatusPill({ status, label = STATUS_DISPLAY_LABELS[status] }: StatusPillProps) {
+  const tone = STATUS_TONES[status];
+  return (
+    <span className={`status-pill tone-${tone}`}>
+      <span className={`status-pill-dot tone-${tone}`} aria-hidden="true" />
+      {label}
+    </span>
+  );
 }

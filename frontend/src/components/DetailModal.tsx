@@ -1,7 +1,10 @@
 import { useEffect } from "react";
+import { STATUS_TONES } from "../lib/status";
+import { getItemBrand, verdictTitle } from "../lib/itemDisplay";
 import type { BatchItem } from "../types/verification";
 import { FieldSummaryList } from "./FieldSummaryList";
 import { FilePreview } from "./FilePreview";
+import { LabelThumbnail } from "./LabelThumbnail";
 
 type DetailModalProps = {
   item: BatchItem;
@@ -35,49 +38,70 @@ export function DetailModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose, onMove]);
 
+  const brand = getItemBrand(item);
+  const tone = STATUS_TONES[item.status];
+
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="slideover-backdrop" role="presentation" onClick={onClose}>
       <section
-        className="detail-modal"
+        className="slideover"
         role="dialog"
         aria-modal="true"
         aria-label="Verification details"
         onClick={(event) => event.stopPropagation()}
       >
-        <header className="detail-header">
-          <div>
-            <p className="eyebrow">
-              File {currentIndex + 1} of {totalItems}
-            </p>
-            <h2>{item.fileName}</h2>
+        <header className="slideover-header">
+          <div className="slideover-heading">
+            <LabelThumbnail item={item} />
+            <div className="slideover-titles">
+              <div className="slideover-brand" title={brand}>
+                {brand}
+              </div>
+              <div className="slideover-file" title={item.fileName}>
+                {item.fileName}
+              </div>
+            </div>
           </div>
-          <div className="detail-actions">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => onMove(-1)}
-              disabled={currentIndex === 0}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => onMove(1)}
-              disabled={currentIndex === totalItems - 1}
-            >
-              Next
-            </button>
-          </div>
+          <button
+            type="button"
+            className="slideover-close"
+            onClick={onClose}
+            aria-label="Close details"
+          >
+            ✕
+          </button>
         </header>
 
-        <div className="detail-grid">
+        <div className="slideover-body">
+          <div className={`verdict-banner tone-${tone}`}>
+            <span className={`verdict-dot tone-${tone}`} aria-hidden="true" />
+            <div>
+              <div className="verdict-title">{verdictTitle(item.status)}</div>
+              <div className="verdict-summary">{item.summary}</div>
+            </div>
+          </div>
+
           <FilePreview item={item} />
+
           <FieldSummaryList item={item} />
         </div>
-        <footer className="detail-footer">
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Close
+
+        <footer className="slideover-footer">
+          <button
+            type="button"
+            className="slideover-prev"
+            onClick={() => onMove(-1)}
+            disabled={currentIndex === 0}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="slideover-next"
+            onClick={() => onMove(1)}
+            disabled={currentIndex === totalItems - 1}
+          >
+            Next label
           </button>
         </footer>
       </section>

@@ -40,32 +40,41 @@ export function App() {
 
   return (
     <>
-      <main className="app-shell">
-        <section className="hero-panel">
-          <div className="hero-copy">
-            <h1>Alcohol Label Verification</h1>
-            <p className="hero-description">
-              Upload one or more applications. The system checks the application against the label
-              and flags anything that needs your review.
-            </p>
-            <p className="prototype-notice">
-              * This prototype is not an official TTB application and should not be used for final
-              label approvals or legal compliance decisions.
-            </p>
+      <div className="console">
+        <aside className="sidebar">
+          <div className="brand-block">
+            <div className="brand-name">Alcohol Label Verification</div>
+            <div className="brand-note">Not affiliated with TTB</div>
           </div>
 
-          <UploadPanel
-            config={config}
-            configError={configError}
-            formError={formError}
-            isSubmitting={isSubmitting}
-            onFilesChosen={handleFiles}
-            onAcceptedFiles={shiftSelectionForNewFiles}
-          />
-        </section>
+          <nav className="sidebar-nav">
+            <span className="nav-item active">
+              <span className="nav-marker" aria-hidden="true" />
+              Open Applications
+            </span>
+            <span className="nav-item" aria-disabled="true">
+              <span className="nav-marker" aria-hidden="true" />
+              History
+              <span className="nav-badge">SOON</span>
+            </span>
+          </nav>
 
-        <ResultsPanel items={items} statusCounts={statusCounts} onOpenDetails={openDetails} />
-      </main>
+          <div className="sidebar-upload">
+            <UploadPanel
+              config={config}
+              configError={configError}
+              formError={formError}
+              isSubmitting={isSubmitting}
+              onFilesChosen={handleFiles}
+              onAcceptedFiles={shiftSelectionForNewFiles}
+            />
+          </div>
+        </aside>
+
+        <main className="main-area">
+          <ResultsPanel items={items} statusCounts={statusCounts} onOpenDetails={openDetails} />
+        </main>
+      </div>
 
       {selectedItem ? (
         <DetailModal
