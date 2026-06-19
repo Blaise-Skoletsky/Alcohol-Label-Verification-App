@@ -101,7 +101,17 @@ export function useVerificationQueue(config: AppConfig) {
       }
 
       setItems((currentItems) => mergeBatchUpdates(currentItems, updates, batchId));
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        markBatchPollingFailed(
+          batchId,
+          "This batch is no longer available. Please upload the files again.",
+          friendlyErrorMessage(error, "The review service could not find this batch."),
+        );
+        setActiveBatchId((currentBatchId) => (currentBatchId === batchId ? null : currentBatchId));
+        return;
+      }
+
       setItems((currentItems) =>
         currentItems.map((item) => {
           if (item.batchId !== batchId || !isPendingStatus(item.status)) {
@@ -116,6 +126,25 @@ export function useVerificationQueue(config: AppConfig) {
         }),
       );
     }
+  }
+
+  function markBatchPollingFailed(batchId: string, summary: string, errorMessage: string) {
+    setItems((currentItems) =>
+      currentItems.map((item) => {
+        if (item.batchId !== batchId || !isPendingStatus(item.status)) {
+          return item;
+        }
+        return {
+          ...item,
+          status: "processing-error",
+          overallLabel: STATUS_LABELS["processing-error"],
+          summary,
+          errorMessage,
+          updatedAtLabel: formatTimestamp(Date.now()),
+          isPolling: false,
+        };
+      }),
+    );
   }
 
   async function submitSingle(file: File, localItem: BatchItem) {

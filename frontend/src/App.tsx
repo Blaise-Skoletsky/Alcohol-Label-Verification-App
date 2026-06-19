@@ -47,13 +47,6 @@ export function App() {
             <div className="brand-note">Not affiliated with TTB</div>
           </div>
 
-          <nav className="sidebar-nav">
-            <span className="nav-item active">
-              <span className="nav-marker" aria-hidden="true" />
-              Open Applications
-            </span>
-          </nav>
-
           <div className="sidebar-upload">
             <UploadPanel
               config={config}
