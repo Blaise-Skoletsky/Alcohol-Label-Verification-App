@@ -5,11 +5,13 @@ services:
       - "8000:8000"
     environment:
       PORT: ${PORT:-8000}
-      MODEL_PROVIDER: ${MODEL_PROVIDER:-mock}
+      PROVIDER_MODE: ${PROVIDER_MODE:-local}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL_PRIMARY: ${OPENROUTER_MODEL_PRIMARY:-google/gemini-3.5-flash}
       OPENROUTER_MODEL_FALLBACKS: ${OPENROUTER_MODEL_FALLBACKS:-google/gemini-3.1-flash-lite,openai/gpt-4.1-mini,anthropic/claude-haiku-4.5}
       OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-5}
+      LOCAL_MODEL_BASE_URL: ${LOCAL_MODEL_BASE_URL:-http://localhost:1234/v1/chat/completions}
+      LOCAL_MODEL_NAME: ${LOCAL_MODEL_NAME:-qwen2.5-vl-7b-instruct}
       BATCH_CONCURRENCY: ${BATCH_CONCURRENCY:-5}
       MAX_BATCH_LABELS: ${MAX_BATCH_LABELS:-400}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}

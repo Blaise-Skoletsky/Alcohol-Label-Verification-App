@@ -11,7 +11,7 @@ Prototype scaffold for an AI-powered alcohol label verification app.
 
 ## Local Docker Run
 
-No `.env` file is required for the basic local demo.
+The default provider mode is `local`. A local run needs an OpenAI-compatible vision model server unless `.env` switches `PROVIDER_MODE=openrouter`.
 
 ```powershell
 docker compose up --build
@@ -40,6 +40,12 @@ npm install
 npm run dev
 ```
 
+## Model Provider Modes
+
+The app defaults to `PROVIDER_MODE=local`. Use `LOCAL_MODEL_BASE_URL` and `LOCAL_MODEL_NAME` to point the backend at a real local OpenAI-compatible vision model server.
+
+Use `PROVIDER_MODE=openrouter` with `OPENROUTER_API_KEY` to call OpenRouter from the backend. The frontend never receives provider credentials and never calls model providers directly.
+
 ## Azure Demo Deployment
 
 See [docs/azure-app-service.md](docs/azure-app-service.md) for the Azure App Service setup and GitHub Actions deployment flow.
@@ -54,7 +60,7 @@ Key assumptions:
 - The same app must be easy to run locally if Treasury network policy or cloud access blocks the hosted demo.
 - The frontend never calls OpenRouter, local model servers, or any model provider directly.
 - The frontend only calls the FastAPI backend.
-- OpenRouter is the cloud default, but local mode should be able to run without an OpenRouter key when configured for a free/open-source local model backend.
+- Local mode is the default runtime path. OpenRouter is the cloud/demo provider when `PROVIDER_MODE=openrouter` is configured.
 - `.env` is required only when enabling OpenRouter or other real credentials.
 
 ## Storage Posture
