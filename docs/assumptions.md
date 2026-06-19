@@ -45,6 +45,55 @@ This prototype is intended for a Treasury-facing rollout demo. The preferred pat
 - The app should support PNG, JPG/JPEG, and PDF combined application+label artifacts.
 - Real public or user-provided label/application examples are preferred for tests. Synthetic labels are not the primary fixture strategy.
 
+## Verification Rule Assumptions (TTB Mandatory Label Information)
+
+The app checks eight fields against TTB mandatory-labeling requirements. The rules
+below explain which checks are unconditional and which are class-dependent, so a
+grader can understand why a given label passes, fails, or is sent to review. The
+three beverage classes are **distilled spirits** (27 CFR Part 5), **wine** (27 CFR
+Part 4), and **malt beverages / beer** (27 CFR Part 7). The federal health warning
+is governed by 27 CFR Part 16.
+
+- **Net contents is mandatory for all three classes** and is never skipped. We do
+  not treat beer as exempt — net contents is required for malt beverages just as it
+  is for wine and spirits (it may even be embossed into the container, but it must
+  be present).
+- **Alcohol content is class-dependent**, and is the main field that may be
+  legitimately absent:
+  - Distilled spirits: always required.
+  - Wine: required above 14% ABV; optional for 7-14% ABV wines that carry the
+    "table wine" / "light wine" class designation.
+  - Malt beverages: optional federally unless the product contains alcohol from
+    added nonbeverage flavors/ingredients (other than hops extract), or state law
+    requires it.
+  - When alcohol content is legitimately absent for the beverage type, the model
+    should pass the field with an explanatory note rather than fail it.
+- **Country of origin is required only for imports.** Clearly domestic products
+  pass this check when no import country-of-origin statement is required.
+- **Class/type designation follows the class -> type hierarchy.** The application
+  often states a broad legal class (e.g. "Wine", "Distilled Spirits") while the
+  label states a more specific type within that class (e.g. "Malvasia Spumante
+  Dolce", "Gin Specialties"). A more specific label type is not a conflict; it
+  passes when the type is a recognized member of the application's class. Only a
+  genuinely different class (e.g. application "Wine" but label "Vodka") fails.
+- **Brand name** allows capitalization and punctuation-only differences but fails
+  substantive wording changes.
+- **Government warning** must match the exact federal statement. The required text
+  is hardcoded (the application value is fixed), so the check is purely whether the
+  full statement appears, readable, on the label.
+- **Conservative default:** when a required value is missing, unreadable, or the
+  region attribution is ambiguous, the field is marked needs_review rather than
+  pass, so a human makes the final call.
+
+### Sources
+
+- Distilled spirits mandatory label information - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/distilled-spirits/ds-labeling-home/ds-brand-label>
+- Wine mandatory label information checklist - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/wine/labeling-wine/wine-labeling-checklist-of-mandatory-label-information>
+- Wine alcohol content and table-wine exception - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/wine/labeling-wine/wine-labeling-alcohol-content>
+- Malt beverage mandatory label information - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-mandatory-label-information>
+- Malt beverage alcohol content optional/mandatory rule - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-alcohol-content>
+- Malt beverage net contents requirement - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-net-contents>
+
 ## Security Assumptions
 
 - OpenRouter and local model credentials must never be exposed to the browser.
