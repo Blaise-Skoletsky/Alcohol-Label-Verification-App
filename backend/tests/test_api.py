@@ -329,18 +329,28 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
 
     payload = provider._build_payload(model="google/gemini-3.5-flash", upload=upload)
 
-    assert "alcohol label verification assistant" in payload["messages"][0]["content"]
-    prompt_text = payload["messages"][1]["content"][0]["text"]
-    assert "artifact_legibility" in prompt_text
-    assert "brand_name" in prompt_text
-    assert "class_type_designation" in prompt_text
-    assert "alcohol_content" in prompt_text
-    assert "net_contents" in prompt_text
-    assert "name_address" in prompt_text
-    assert "country_of_origin" in prompt_text
-    assert "government_warning" in prompt_text
-    assert "Never return needs_review for government_warning" in prompt_text
-    assert '"government_warning":        {"status":"pass|fail",' in prompt_text
+    system_text = payload["messages"][0]["content"]
+    user_text = payload["messages"][1]["content"][0]["text"]
+    assert system_text.startswith("NON-NEGOTIABLE VISUAL GATE")
+    assert "alcohol label verification assistant" in system_text
+    assert "artifact_legibility" in system_text
+    assert "brand_name" in system_text
+    assert "class_type_designation" in system_text
+    assert "alcohol_content" in system_text
+    assert "net_contents" in system_text
+    assert "name_address" in system_text
+    assert "country_of_origin" in system_text
+    assert "government_warning" in system_text
+    assert "Never return needs_review for government_warning" in system_text
+    assert '"government_warning":        {"status":"pass|fail",' in system_text
+    assert '"application_value":"Required federal government warning"' in system_text
+    assert "Government warning passes only when the label artwork visibly prints the warning heading" in system_text
+    assert "Never invent or fill in government_warning.label_value from regulatory knowledge" in system_text
+    assert user_text == (
+        "Review the attached combined application-and-label artifact using the system rules. "
+        "Use only text visible in the image; do not infer or fill missing label text from the rules."
+    )
+    assert "government_warning" not in user_text
 
 
 def test_openrouter_parser_accepts_string_evidence_items() -> None:

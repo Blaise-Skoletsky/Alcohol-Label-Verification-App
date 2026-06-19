@@ -19,21 +19,26 @@ class VerificationPromptService:
     # ------------------------------------------------------------------
 
     def _system(self) -> str:
-        return (
-            "You are an alcohol label verification assistant for TTB-style application and label "
-            "artwork review. Return JSON only. Do not include markdown. Be conservative: if the "
-            "application section, label artwork section, or a required value is missing, unreadable, "
-            "or ambiguous, use needs_review instead of pass. Exception: government_warning is a "
-            "binary field; if the required warning is missing, unreadable, ambiguous, covered, or "
-            "not visibly printed on the label artwork, government_warning must be fail."
-        )
-
-    # ------------------------------------------------------------------
-    # User instruction — assembled from one method per section
-    # ------------------------------------------------------------------
-
-    def _user(self) -> str:
         sections = [
+            (
+                "NON-NEGOTIABLE VISUAL GATE: government_warning passes only when a government "
+                "warning is visibly printed on the affixed label artwork. The normal pass case "
+                "has the literal heading 'GOVERNMENT WARNING'. For small, skewed, or rotated "
+                "affixed labels, a visibly printed warning block may also pass when the heading "
+                "or two-numbered-warning structure is identifiable. If the warning area is "
+                "absent, blanked out, covered, only inferred, or only present in non-label form "
+                "text, government_warning must be fail and overall status must be fail. Never "
+                "invent or fill in missing label text from regulatory knowledge."
+            ),
+            (
+                "You are an alcohol label verification assistant for TTB-style application and "
+                "label artwork review. Return JSON only. Do not include markdown. Be conservative: "
+                "if the application section, label artwork section, or a required value is missing, "
+                "unreadable, or ambiguous, use needs_review instead of pass. Exception: "
+                "government_warning is a binary field; if the required warning is missing, "
+                "unreadable, ambiguous, covered, or not visibly printed on the label artwork, "
+                "government_warning must be fail."
+            ),
             self._task_intro(),
             self._overall_verdict_rules(),
             self._field_artifact_legibility(),
@@ -45,8 +50,19 @@ class VerificationPromptService:
             self._field_country_of_origin(),
             self._field_government_warning(),
             self._output_format(),
+            self._hard_rules(),
         ]
         return "\n\n".join(sections)
+
+    # ------------------------------------------------------------------
+    # User instruction
+    # ------------------------------------------------------------------
+
+    def _user(self) -> str:
+        return (
+            "Review the attached combined application-and-label artifact using the system rules. "
+            "Use only text visible in the image; do not infer or fill missing label text from the rules."
+        )
 
     # ------------------------------------------------------------------
     # Task intro
@@ -287,17 +303,10 @@ the application."""
     # ------------------------------------------------------------------
 
     def _field_government_warning(self) -> str:
-        required_text = (
-            "GOVERNMENT WARNING: "
-            "(1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES "
-            "DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. "
-            "(2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR "
-            "OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
-        )
         return (
             "FIELD 8 — government_warning:\n"
             "Same rule for all beverage classes. Do not extract application_value from the "
-            "artifact — always set it to the verbatim required text below. Set label_value to "
+            "artifact — always set it to 'Required federal government warning'. Set label_value to "
             "the exact warning text you can read from the label artwork when readable (or "
             "'Warning block visibly present' when the label is small or rotated but the warning "
             "block is visibly present, or 'Not present' if absent, or "
@@ -314,11 +323,12 @@ the application."""
             "warning as absent and fail.\n\n"
             "This field has only two allowed statuses: pass or fail. Never return needs_review "
             "for government_warning.\n\n"
-            f"Required text: {required_text}\n\n"
+            "Required warning: the standard federal alcoholic-beverage government warning. It "
+            "must have the literal heading 'GOVERNMENT WARNING' and two numbered statements: "
+            "one about pregnancy and birth-defect risk, and one about impaired ability to drive "
+            "or operate machinery and possible health problems.\n\n"
             "Before assigning pass, verify from the image itself that the literal heading "
-            "'GOVERNMENT WARNING' is visible on the label artwork. Do not copy the Required text "
-            "into label_value unless you actually read it from the label artwork. If you are "
-            "guessing, fail.\n\n"
+            "'GOVERNMENT WARNING' is visible on the label artwork. If you are guessing, fail.\n\n"
             "PASS: The complete warning statement appears on the label artwork. Prefer reading "
             "all words in order. Minor OCR variance in capitalization or spacing is acceptable. "
             "For small, skewed, or rotated affixed labels, do not fail solely because the text is "
@@ -340,13 +350,6 @@ the application."""
     # ------------------------------------------------------------------
 
     def _output_format(self) -> str:
-        gov_warning = (
-            "GOVERNMENT WARNING: "
-            "(1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES "
-            "DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. "
-            "(2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR "
-            "OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
-        )
         field_shape = (
             '"status":"pass|fail|needs_review",'
             '"application_value":"...",'
@@ -369,7 +372,7 @@ the application."""
             f'    "country_of_origin":         {{{field_shape}}},\n'
             '    "government_warning":        {'
             '"status":"pass|fail",'
-            f'"application_value":"{gov_warning}",'
+            '"application_value":"Required federal government warning",'
             '"label_value":"<what appears on label, Warning block visibly present, Not present, or Unreadable or incomplete>",'
             '"reason":"short internal note",'
             '"evidence":[]'
@@ -377,3 +380,19 @@ the application."""
             "  }\n"
             "}"
         )
+
+    # ------------------------------------------------------------------
+    # Hard rules recap
+    # ------------------------------------------------------------------
+
+    def _hard_rules(self) -> str:
+        return """\
+HARD RULES:
+1. Return only the JSON object; do not include markdown or explanatory prose.
+2. Compare application values only to label artwork values; never compare two values from the same region.
+3. Use needs_review instead of pass for any non-government-warning field that is missing, unreadable, ambiguous, or uncertain.
+4. Government warning is binary: status must be pass or fail, never needs_review.
+5. Government warning passes only when the label artwork visibly prints the warning heading or, for small/skewed/rotated labels, an identifiable government-warning block with two numbered warning statements.
+6. Never invent or fill in government_warning.label_value from regulatory knowledge; use only text visibly read from the label artwork.
+7. If the warning is absent, covered, blanked out, inferred, or only present in non-label form text, government_warning must be fail.
+8. Overall status is fail if any field is fail; otherwise needs_review if any field is needs_review; otherwise pass."""
