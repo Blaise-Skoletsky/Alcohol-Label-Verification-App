@@ -1,0 +1,15 @@
+.env
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+*.tsbuildinfo
+node_modules/
+dist/
+build/
+data/
+.DS_Store
+
+data/*
+scraper/*

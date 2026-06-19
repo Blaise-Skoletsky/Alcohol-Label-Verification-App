@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: ${PORT:-8000}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-mock}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL_PRIMARY: ${OPENROUTER_MODEL_PRIMARY:-google/gemini-3.5-flash}
+      OPENROUTER_MODEL_FALLBACKS: ${OPENROUTER_MODEL_FALLBACKS:-google/gemini-3.1-flash-lite,openai/gpt-4.1-mini,anthropic/claude-haiku-4.5}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-5}
+      BATCH_CONCURRENCY: ${BATCH_CONCURRENCY:-5}
+      MAX_BATCH_LABELS: ${MAX_BATCH_LABELS:-400}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}

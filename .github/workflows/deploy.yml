@@ -1,0 +1,82 @@
+name: Build and deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_CONTAINER_REGISTRY: ${{ vars.AZURE_CONTAINER_REGISTRY }}
+  AZURE_CONTAINER_IMAGE: ${{ vars.AZURE_CONTAINER_IMAGE }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pytest
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name "$AZURE_CONTAINER_REGISTRY"
+
+      - name: Build and push image
+        env:
+          ACR_LOGIN_SERVER: ${{ vars.AZURE_CONTAINER_REGISTRY }}.azurecr.io
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ACR_LOGIN_SERVER/$AZURE_CONTAINER_IMAGE:$IMAGE_TAG" -t "$ACR_LOGIN_SERVER/$AZURE_CONTAINER_IMAGE:latest" .
+          docker push "$ACR_LOGIN_SERVER/$AZURE_CONTAINER_IMAGE:$IMAGE_TAG"
+          docker push "$ACR_LOGIN_SERVER/$AZURE_CONTAINER_IMAGE:latest"
+
+      - name: Deploy image to Azure App Service
+        env:
+          ACR_LOGIN_SERVER: ${{ vars.AZURE_CONTAINER_REGISTRY }}.azurecr.io
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          az webapp config container set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --docker-custom-image-name "$ACR_LOGIN_SERVER/$AZURE_CONTAINER_IMAGE:$IMAGE_TAG" \
+            --docker-registry-server-url "https://$ACR_LOGIN_SERVER"
+          az webapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_WEBAPP_NAME" \
+            --settings WEBSITES_PORT=8000 PORT=8000
