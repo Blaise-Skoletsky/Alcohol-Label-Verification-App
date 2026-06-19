@@ -12,22 +12,16 @@ interface SampleEntry {
 
 const SAMPLES: SampleEntry[] = [
   {
-    id: "casa",
-    brand: "Casamigos Tequila",
-    file: "pass/casamigos_glare_readable.png",
-    desc: "Expected pass: spirits label with readable brand, class, alcohol content, net contents, origin, and warning text.",
+    id: "big-lake",
+    brand: "Big Lake",
+    file: "pass/big_lake_should_pass_or_be_non_legible.png",
+    desc: "Expected pass: original label evidence is readable enough to verify the required checks.",
   },
   {
     id: "coyam",
     brand: "Coyam (Chile)",
     file: "pass/coyam.png",
     desc: "Expected pass: wine label with matching brand, origin, contents, and required warning information.",
-  },
-  {
-    id: "nat",
-    brand: "Natura Cabernet",
-    file: "pass/natura.png",
-    desc: "Expected pass: original Natura label includes the required government warning and supporting label details.",
   },
   {
     id: "gek",
@@ -70,6 +64,18 @@ const SAMPLES: SampleEntry[] = [
     brand: "Mackinaw Trail",
     file: "fail/mackinaw_trail.png",
     desc: "Expected fail: the label evidence is missing or unclear for at least one required verification field.",
+  },
+  {
+    id: "barenjager-contents",
+    brand: "Barenjager Honey & Pear",
+    file: "fail/barenjager_incorrect_contents.png",
+    desc: "Expected fail: the label net contents do not match the application contents.",
+  },
+  {
+    id: "cotton-hollow-legibility",
+    brand: "Cotton Hollow Rye",
+    file: "fail/cotton_hollow_should_not_be_legible.png",
+    desc: "Expected fail: the label evidence is not legible enough to verify all required checks.",
   },
   {
     id: "chick-warning",
