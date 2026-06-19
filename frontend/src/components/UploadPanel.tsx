@@ -9,6 +9,7 @@ type UploadPanelProps = {
   isSubmitting: boolean;
   onFilesChosen: (files: File[]) => { accepted: boolean; addedCount: number };
   onAcceptedFiles: (count: number) => void;
+  onOpenSamplePicker: () => void;
 };
 
 export function UploadPanel({
@@ -18,6 +19,7 @@ export function UploadPanel({
   isSubmitting,
   onFilesChosen,
   onAcceptedFiles,
+  onOpenSamplePicker,
 }: UploadPanelProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -36,6 +38,16 @@ export function UploadPanel({
 
   return (
     <div className="upload-panel">
+      <button type="button" className="sample-button" onClick={onOpenSamplePicker}>
+        <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+          <rect x="0.5" y="0.5" width="6" height="6" rx="1.5" fill="#1a1a1a" />
+          <rect x="8.5" y="0.5" width="6" height="6" rx="1.5" fill="#c2c2bb" />
+          <rect x="0.5" y="8.5" width="6" height="6" rx="1.5" fill="#c2c2bb" />
+          <rect x="8.5" y="8.5" width="6" height="6" rx="1.5" fill="#1a1a1a" />
+        </svg>
+        Use sample labels
+        <span className="demo-chip">DEMO</span>
+      </button>
       <input
         ref={inputRef}
         id="artifact-upload"

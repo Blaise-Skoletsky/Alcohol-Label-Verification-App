@@ -8,9 +8,10 @@ type ResultsPanelProps = {
   items: BatchItem[];
   statusCounts: Record<UiStatus, number>;
   onOpenDetails: (index: number) => void;
+  onOpenSamplePicker: () => void;
 };
 
-export function ResultsPanel({ items, statusCounts, onOpenDetails }: ResultsPanelProps) {
+export function ResultsPanel({ items, statusCounts, onOpenDetails, onOpenSamplePicker }: ResultsPanelProps) {
   const [activeFilter, setActiveFilter] = useState<ResultFilter>("all");
 
   const failedCount = statusCounts.fail + statusCounts["processing-error"];
@@ -73,9 +74,10 @@ export function ResultsPanel({ items, statusCounts, onOpenDetails }: ResultsPane
         {items.length === 0 ? (
           <div className="empty-state">
             <h3>No open applications</h3>
-            <p>
-              Use &ldquo;Upload labels&rdquo; to add a batch. Each label is checked independently.
-            </p>
+            <p>Upload your own labels, or try the demo with sample labels from the data set.</p>
+            <button type="button" className="empty-state-sample-btn" onClick={onOpenSamplePicker}>
+              Browse sample labels
+            </button>
           </div>
         ) : filteredItems.length === 0 ? (
           <div className="empty-state">
