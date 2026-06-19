@@ -23,7 +23,9 @@ class VerificationPromptService:
             "You are an alcohol label verification assistant for TTB-style application and label "
             "artwork review. Return JSON only. Do not include markdown. Be conservative: if the "
             "application section, label artwork section, or a required value is missing, unreadable, "
-            "or ambiguous, use needs_review instead of pass."
+            "or ambiguous, use needs_review instead of pass. Exception: government_warning is a "
+            "binary field; if the required warning is missing, unreadable, ambiguous, covered, or "
+            "not visibly printed on the label artwork, government_warning must be fail."
         )
 
     # ------------------------------------------------------------------
@@ -138,7 +140,10 @@ PASS:
   - Application "Distilled Spirits" passes with label: Gin, Gin Specialties, Vodka, Rum, \
 Whiskey, Bourbon Whiskey, Tennessee Whiskey, Straight Bourbon, Rye Whiskey, Brandy, Cognac, \
 Tequila, Mezcal, Aquavit, Schnapps, Liqueur, Cordial, or any other recognized distilled \
-spirits designation.
+spirits designation. Distilled spirits also pass when the label uses flavor, specialty, or \
+marketing wording such as "cider", "apple cider", "winter cider", "punch", "cream", or \
+"cocktail" but the label still shows distilled-spirits context such as whiskey/gin/liqueur, \
+proof, or % alc/vol. Do not treat that flavor wording as a malt beverage or wine class by itself.
   - Application "Wine" passes with label: Chardonnay, Cabernet Sauvignon, Merlot, Pinot Noir, \
 Rosé, Dry Red Table Wine, Table Wine, Sparkling Wine, Champagne, Prosecco, Cava, Moscato, \
 Riesling, Sake (if Japanese or domestically brewed), Dessert Wine, Port-style, any grape \
@@ -147,8 +152,8 @@ varietal or recognized wine designation.
 Pilsner, Ale, Wheat Beer, Hefeweizen, Sour, Belgian Tripel, or any recognized beer/ale style.
 
 FAIL: The label designates a genuinely different legal class from the application — e.g. Wine \
-application with Vodka label, Distilled Spirits application with Lager label, Malt Beverage \
-application with Wine label."""
+application with Vodka label, Distilled Spirits application with Lager/Beer/Ale label and no \
+spirits proof/ABV context, Malt Beverage application with Wine label."""
 
     # ------------------------------------------------------------------
     # Field 4: alcohol_content
@@ -293,18 +298,41 @@ the application."""
             "FIELD 8 — government_warning:\n"
             "Same rule for all beverage classes. Do not extract application_value from the "
             "artifact — always set it to the verbatim required text below. Set label_value to "
-            "exactly what appears on the label (or 'Not present' if absent, or "
+            "the exact warning text you can read from the label artwork when readable (or "
+            "'Warning block visibly present' when the label is small or rotated but the warning "
+            "block is visibly present, or 'Not present' if absent, or "
             "'Unreadable or incomplete' if obscured).\n\n"
+            "Use only the affixed label artwork region, usually below the application form heading "
+            "'AFFIX COMPLETE SET OF LABELS BELOW'. Ignore the application form, instructions, "
+            "certification text, TTB form footer, and any other non-label text. Do not infer that "
+            "the warning exists because the product is alcoholic; it must be visibly printed on "
+            "the label artwork itself. The words 'GOVERNMENT WARNING' must be visibly printed on "
+            "the label artwork for this field to pass. A blank white strip, covered/whited-out "
+            "area, barcode area, UPC placeholder, ingredient paragraph, sulfite statement, or "
+            "importer/address text is not a government warning. If the label has a white or blank "
+            "rectangle where text appears to have been removed or covered, treat the government "
+            "warning as absent and fail.\n\n"
             "This field has only two allowed statuses: pass or fail. Never return needs_review "
             "for government_warning.\n\n"
             f"Required text: {required_text}\n\n"
-            "PASS: The complete statement appears on the label — all words present in correct "
-            "order. Minor OCR variance in capitalization or spacing is acceptable, but every "
-            "word must be present.\n\n"
+            "Before assigning pass, verify from the image itself that the literal heading "
+            "'GOVERNMENT WARNING' is visible on the label artwork. Do not copy the Required text "
+            "into label_value unless you actually read it from the label artwork. If you are "
+            "guessing, fail.\n\n"
+            "PASS: The complete warning statement appears on the label artwork. Prefer reading "
+            "all words in order. Minor OCR variance in capitalization or spacing is acceptable. "
+            "For small, skewed, or rotated affixed labels, do not fail solely because the text is "
+            "hard to OCR when a government-warning block is visibly present on the label artwork "
+            "and you can identify the GOVERNMENT WARNING heading plus the two numbered sentence "
+            "structure. To pass, label_value must be either the full warning text as read from "
+            "the label artwork or 'Warning block visibly present' for small/rotated label artwork "
+            "where the complete required warning block is visibly present.\n\n"
             "FAIL: The statement is absent, partially visible, partially legible, obscured, cut "
-            "off, too low-resolution to confirm, incomplete, truncated, altered, paraphrased, "
-            "missing either numbered sentence, or not word-for-word identical to the required "
-            "government warning."
+            "off, incomplete, truncated, altered, paraphrased, missing either numbered sentence, "
+            "missing the GOVERNMENT WARNING heading, or not word-for-word identical to the "
+            "required government warning when readable. If there is no visible warning block on "
+            "the label artwork itself, fail this field. If the label has a blank or covered area "
+            "where warning text would normally appear, treat the warning as absent and fail."
         )
 
     # ------------------------------------------------------------------
@@ -342,7 +370,7 @@ the application."""
             '    "government_warning":        {'
             '"status":"pass|fail",'
             f'"application_value":"{gov_warning}",'
-            '"label_value":"<what appears on label, Not present, or Unreadable or incomplete>",'
+            '"label_value":"<what appears on label, Warning block visibly present, Not present, or Unreadable or incomplete>",'
             '"reason":"short internal note",'
             '"evidence":[]'
             "}\n"

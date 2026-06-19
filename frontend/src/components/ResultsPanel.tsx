@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import type { AppConfig } from "../types/config";
 import type { BatchItem, UiStatus } from "../types/verification";
 import { DemoInfoModal } from "./DemoInfoModal";
 import { ResultsList } from "./ResultsList";
@@ -18,10 +19,22 @@ type ResultsPanelProps = {
   activeFilter: ResultFilter;
   onFilterChange: (filter: ResultFilter) => void;
   onOpenDetails: (index: number) => void;
-  onOpenSamplePicker: () => void;
+  config: AppConfig;
+  isSubmitting: boolean;
+  onFilesChosen: (files: File[]) => { accepted: boolean; addedCount: number };
+  onAcceptedFiles: (count: number) => void;
 };
 
-export function ResultsPanel({ items, filteredItems, statusCounts, activeFilter, onFilterChange, onOpenDetails, onOpenSamplePicker }: ResultsPanelProps) {
+export function ResultsPanel({ items, filteredItems, statusCounts, activeFilter, onFilterChange, onOpenDetails, config, isSubmitting, onFilesChosen, onAcceptedFiles }: ResultsPanelProps) {
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  function handleUploadChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const fileList = event.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const result = onFilesChosen(Array.from(fileList));
+    if (result.accepted) onAcceptedFiles(result.addedCount);
+    event.target.value = "";
+  }
   const [infoOpen, setInfoOpen] = useState(false);
 
   const failedCount = statusCounts.fail + statusCounts["processing-error"];
@@ -90,8 +103,22 @@ export function ResultsPanel({ items, filteredItems, statusCounts, activeFilter,
           <div className="empty-state">
             <h3>No open applications</h3>
             <p>Upload your own labels, or try the demo with sample labels from the data set.</p>
-            <button type="button" className="empty-state-sample-btn" onClick={onOpenSamplePicker}>
-              Browse sample labels
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept={config.allowedFileTypes.join(",")}
+              multiple
+              className="sr-only"
+              onChange={handleUploadChange}
+              disabled={isSubmitting}
+            />
+            <button
+              type="button"
+              className="empty-state-sample-btn"
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={isSubmitting}
+            >
+              Upload labels
             </button>
           </div>
         ) : filteredItems.length === 0 ? (
@@ -159,4 +186,3 @@ function FilterPill({ label, count, filter, activeFilter, onSelect }: FilterPill
     </button>
   );
 }
-

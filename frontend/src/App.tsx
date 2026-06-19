@@ -100,7 +100,10 @@ export function App() {
             activeFilter={activeFilter}
             onFilterChange={setActiveFilter}
             onOpenDetails={openDetails}
-            onOpenSamplePicker={() => setSamplePickerOpen(true)}
+            config={config}
+            isSubmitting={isSubmitting}
+            onFilesChosen={handleFiles}
+            onAcceptedFiles={shiftSelectionForNewFiles}
           />
         </main>
       </div>

@@ -20,9 +20,10 @@ class ResultGuardService:
             country_of_origin=self._guard_required_values(result.fields.country_of_origin),
             government_warning=self._guard_required_values(result.fields.government_warning),
         )
+        overall_status = self._overall_status(guarded_fields)
         return ProviderResult(
-            status=self._overall_status(guarded_fields),
-            summary=result.summary,
+            status=overall_status,
+            summary=self._summary(result.summary, overall_status, guarded_fields),
             fields=guarded_fields,
             model=result.model,
         )
@@ -127,3 +128,36 @@ class ResultGuardService:
         if "needs_review" in field_statuses:
             return VerificationStatus.needs_review
         return VerificationStatus.pass_status
+
+    def _summary(
+        self,
+        original_summary: str,
+        overall_status: VerificationStatus,
+        fields: VerificationFields,
+    ) -> str:
+        if overall_status == VerificationStatus.pass_status:
+            return original_summary
+
+        failed_fields = self._field_labels(fields, "fail")
+        if failed_fields:
+            return f"Required checks failed: {', '.join(failed_fields)}."
+
+        review_fields = self._field_labels(fields, "needs_review")
+        if review_fields:
+            return f"Manual review needed: {', '.join(review_fields)}."
+
+        return original_summary
+
+    def _field_labels(self, fields: VerificationFields, status: str) -> list[str]:
+        labels = {
+            "artifact_legibility": "artifact legibility",
+            "brand_name": "brand name",
+            "class_type_designation": "class/type designation",
+            "alcohol_content": "alcohol content",
+            "net_contents": "net contents",
+            "name_address": "name/address",
+            "country_of_origin": "country of origin",
+            "government_warning": "government warning",
+        }
+        dumped = fields.model_dump()
+        return [label for field_name, label in labels.items() if dumped[field_name]["status"] == status]

@@ -460,5 +460,6 @@ def test_result_guard_does_not_allow_non_abv_text_to_pass_alcohol_content() -> N
     )
 
     assert result.status == VerificationStatus.needs_review
+    assert result.summary == "Manual review needed: alcohol content."
     assert result.fields.alcohol_content.status == "needs_review"
     assert "alcohol-content" in result.fields.alcohol_content.reason

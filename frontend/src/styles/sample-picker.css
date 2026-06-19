@@ -110,11 +110,35 @@
   background: #f4f4f0;
 }
 
+.sample-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  gap: 12px;
+}
+
 .sample-filter-pills {
   display: flex;
   gap: 8px;
-  margin-top: 16px;
   flex-wrap: wrap;
+}
+
+.sample-select-all-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5a5a56;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sample-select-all-btn:hover {
+  color: #0a0a0a;
 }
 
 .sample-pill {

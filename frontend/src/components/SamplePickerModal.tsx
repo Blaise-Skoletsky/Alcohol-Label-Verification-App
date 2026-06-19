@@ -146,6 +146,17 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
     setSelected((prev) => (prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id]));
   }
 
+  const visibleIds = visible.map((s) => s.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.includes(id));
+
+  function toggleSelectAll() {
+    if (allVisibleSelected) {
+      setSelected((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      setSelected((prev) => [...new Set([...prev, ...visibleIds])]);
+    }
+  }
+
   async function handleRun() {
     if (selected.length === 0 || isRunning) return;
     setIsRunning(true);
@@ -206,18 +217,27 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
             </button>
           </div>
 
-          <div className="sample-filter-pills">
-            {FILTER_DEFS.map((pill) => (
-              <button
-                key={pill.key}
-                type="button"
-                className={`sample-pill${filter === pill.key ? " active" : ""}`}
-                onClick={() => setFilter(pill.key)}
-              >
-                {pill.label}
-                <span className="sample-pill-count">{counts[pill.key]}</span>
-              </button>
-            ))}
+          <div className="sample-filter-bar">
+            <div className="sample-filter-pills">
+              {FILTER_DEFS.map((pill) => (
+                <button
+                  key={pill.key}
+                  type="button"
+                  className={`sample-pill${filter === pill.key ? " active" : ""}`}
+                  onClick={() => setFilter(pill.key)}
+                >
+                  {pill.label}
+                  <span className="sample-pill-count">{counts[pill.key]}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="sample-select-all-btn"
+              onClick={toggleSelectAll}
+            >
+              {allVisibleSelected ? "Deselect all" : "Select all"}
+            </button>
           </div>
         </div>
 
