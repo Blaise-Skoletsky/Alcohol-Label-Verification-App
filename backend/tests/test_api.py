@@ -53,9 +53,9 @@ def make_fields(
 ) -> VerificationFields:
     fields = {
         "artifact_legibility": make_field(
-            application_value="Application section readable",
+            application_value="N/A - text entry form",
             label_value="Label artwork readable",
-            reason="Both regions are readable.",
+            reason="Label artwork is readable.",
         ),
         "brand_name": make_field(
             application_value="Example Brand",
@@ -344,8 +344,8 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
 
     system_text = payload["messages"][0]["content"]
     user_text = payload["messages"][1]["content"][0]["text"]
-    assert system_text.startswith("NON-NEGOTIABLE GOVERNMENT WARNING GATE")
-    assert "alcohol label verification assistant" in system_text
+    assert system_text.startswith("You verify TTB-style alcohol label artwork")
+    assert "TTB-style alcohol label artwork" in system_text
     assert "artifact_legibility" in system_text
     assert "brand_name" in system_text
     assert "class_type_designation" in system_text
@@ -354,14 +354,17 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "name_address" in system_text
     assert "country_of_origin" in system_text
     assert "government_warning" in system_text
-    assert "Allowed statuses: pass or fail only" in system_text
-    assert '"government_warning":        {"status":"pass|fail",' in system_text
-    assert '"application_value":"Required federal government warning"' in system_text
+    assert "Each field object must be" in system_text
+    assert "Required fields: artifact_legibility" in system_text
+    assert "application_value='Required federal government warning'" in system_text
     assert "APPLICATION_VALUES_JSON" in system_text
-    assert "The uploaded image is label artwork only" in system_text
-    assert "Do not extract application values from the image" in system_text
-    assert "prefix 'GOVERNMENT WARNING:' is all caps and visibly bold" in system_text
-    assert "Never invent or fill in government_warning.label_value from regulatory knowledge" in system_text
+    assert "The image is label artwork only" in system_text
+    assert "never extract application values from it" in system_text
+    assert "application_value='N/A - text entry form'" in system_text
+    assert "FIELD 1 - artifact_legibility" in system_text
+    assert "decimal comma = decimal point" in system_text
+    assert "prefix 'GOVERNMENT WARNING:' is all caps and bold" in system_text
+    assert "inferred from regulatory knowledge" in system_text
     assert "Review the attached label artwork image using the system rules." in user_text
     assert "APPLICATION_VALUES_JSON" in user_text
     assert '"brand_name": "{{brand_name}}"' in user_text
@@ -383,8 +386,9 @@ def test_verification_prompt_accepts_application_values() -> None:
     assert "\"brand_name\": \"Stone's Throw\"" in prompt.user_instruction
     assert '"class_type_designation": "Wine"' in prompt.user_instruction
     assert '"alcohol_content": "13.5% ABV"' in prompt.user_instruction
-    assert "The uploaded image is label artwork only" in prompt.system_instruction
-    assert "Do not extract application values from the image" in prompt.system_instruction
+    assert "The image is label artwork only" in prompt.system_instruction
+    assert "never extract application values from it" in prompt.system_instruction
+    assert "application_value='N/A - text entry form'" in prompt.system_instruction
 
 
 def test_verify_forwards_application_values_to_service() -> None:
@@ -704,3 +708,82 @@ def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
     assert result.fields.alcohol_content.reason == (
         "Alcohol content is not required for this table/light wine designation."
     )
+
+
+def test_result_guard_treats_decimal_comma_as_matching_abv() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.fail,
+            summary="Model failed the field.",
+            fields=make_fields(
+                alcohol_content=make_field(
+                    status="fail",
+                    application_value="Alc. 14.5% by vol.",
+                    label_value="ALC. 14,5% BY VOL.",
+                    reason="Application alcohol content and label alcohol content do not match exactly.",
+                )
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.alcohol_content.status == "pass"
+
+
+def test_result_guard_allows_artifact_legibility_application_na() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "artifact_legibility": make_field(
+                        application_value="N/A - text entry form",
+                        label_value="Label artwork readable",
+                        reason="Label artwork is readable.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.artifact_legibility.status == "pass"
+
+
+def test_result_guard_fails_artifact_legibility_when_label_unreadable() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "artifact_legibility": make_field(
+                        application_value="N/A - text entry form",
+                        label_value="Unreadable",
+                        reason="Model incorrectly accepted unreadable label artwork.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: artifact legibility."
+    assert result.fields.artifact_legibility.status == "fail"
+    assert "label image is readable" in result.fields.artifact_legibility.reason

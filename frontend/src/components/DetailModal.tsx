@@ -227,16 +227,25 @@ export function DetailModal({
                       </div>
                       {card.isFail ? (
                         <div>
-                          <div className="field-card-grid">
-                            <div className="field-val">
-                              <div className="field-val-label">Application</div>
-                              <div className="field-val-text">{card.appVal}</div>
+                          {card.key === "government_warning" ? (
+                            <div className="field-card-grid single">
+                              <div className="field-val">
+                                <div className="field-val-label">On label</div>
+                                <div className="field-val-text">{card.labelVal}</div>
+                              </div>
                             </div>
-                            <div className="field-val">
-                              <div className="field-val-label">On label</div>
-                              <div className="field-val-text">{card.labelVal}</div>
+                          ) : (
+                            <div className="field-card-grid">
+                              <div className="field-val">
+                                <div className="field-val-label">Application</div>
+                                <div className="field-val-text">{card.appVal}</div>
+                              </div>
+                              <div className="field-val">
+                                <div className="field-val-label">On label</div>
+                                <div className="field-val-text">{card.labelVal}</div>
+                              </div>
                             </div>
-                          </div>
+                          )}
                           <p className="field-reason">{card.reason}</p>
                         </div>
                       ) : null}

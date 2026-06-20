@@ -12,6 +12,4 @@ data/
 .DS_Store
 
 data/*
-scraper/*
-backend/scripts/*
 AZURE_TEARDOWN.local.md

@@ -11,7 +11,7 @@ from app.providers.base import ProviderResult
 class ResultGuardService:
     def enforce(self, result: ProviderResult) -> ProviderResult:
         guarded_fields = VerificationFields(
-            artifact_legibility=self._guard_required_values(result.fields.artifact_legibility),
+            artifact_legibility=self._guard_artifact_legibility(result.fields.artifact_legibility),
             brand_name=self._guard_required_values(result.fields.brand_name),
             class_type_designation=self._guard_required_values(result.fields.class_type_designation),
             alcohol_content=self._guard_alcohol_content(result.fields.alcohol_content),
@@ -37,6 +37,16 @@ class ResultGuardService:
                 update={
                     "status": "fail",
                     "reason": "A passing field must include readable application and label values.",
+                }
+        )
+        return field
+
+    def _guard_artifact_legibility(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if field.status == "pass" and not self._has_reviewable_value(field.label_value):
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": "Artifact legibility can pass only when the label image is readable.",
                 }
             )
         return field
@@ -96,9 +106,9 @@ class ResultGuardService:
             return None
 
         normalized = value.strip().lower()
-        proof_match = re.search(r"(\d+(?:\.\d+)?)\s*proof\b", normalized)
+        proof_match = re.search(r"(\d+(?:[\.,]\d+)?)\s*proof\b", normalized)
         if proof_match:
-            return float(proof_match.group(1)) / 2
+            return float(proof_match.group(1).replace(",", ".")) / 2
 
         if re.search(r"\d", normalized) and (
             "%" in normalized
@@ -107,14 +117,14 @@ class ResultGuardService:
             or "abv" in normalized
             or self._is_bare_number(normalized)
         ):
-            number_match = re.search(r"\d+(?:\.\d+)?", normalized)
+            number_match = re.search(r"\d+(?:[\.,]\d+)?", normalized)
             if number_match:
-                return float(number_match.group(0))
+                return float(number_match.group(0).replace(",", "."))
 
         return None
 
     def _is_bare_number(self, value: str) -> bool:
-        return re.fullmatch(r"\s*\d+(?:\.\d+)?\s*", value) is not None
+        return re.fullmatch(r"\s*\d+(?:[\.,]\d+)?\s*", value) is not None
 
     def _overall_status(self, fields: VerificationFields) -> VerificationStatus:
         field_statuses = [
