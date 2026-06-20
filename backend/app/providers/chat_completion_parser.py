@@ -12,6 +12,7 @@ from app.models.verification import (
     VerificationStatus,
 )
 from app.providers.base import ProviderError, ProviderResult
+from app.providers.base import ProviderPromptResult
 
 
 VERIFICATION_FIELD_NAMES = (
@@ -38,21 +39,17 @@ def parse_chat_completion_response(
     deterministic_fields: Mapping[str, dict] | None = None,
 ) -> ProviderResult:
     try:
-        body = response.json()
-        content = body["choices"][0]["message"]["content"]
-        parsed = json.loads(content) if isinstance(content, str) else content
+        parsed = _parse_response_content(response)
         fields = _parse_fields(parsed["fields"], deterministic_fields or {})
-        duration_ms = int((time.perf_counter() - started) * 1000)
         return ProviderResult(
             status=VerificationStatus(parsed["status"]),
             summary=parsed["summary"],
             fields=fields,
-            model=ModelMetadata(
-                provider=provider_name,
+            model=_model_metadata(
                 model=model,
+                provider_name=provider_name,
                 provider_mode=provider_mode,
-                duration_ms=duration_ms,
-                fallback_attempts=max(0, len(attempted_models) - 1),
+                started=started,
                 attempted_models=attempted_models,
             ),
         )
@@ -62,20 +59,87 @@ def parse_chat_completion_response(
         ) from exc
 
 
+def parse_chat_completion_prompt_response(
+    *,
+    response: httpx.Response,
+    model: str,
+    provider_name: str,
+    provider_mode: str,
+    started: float,
+    attempted_models: list[str],
+    requested_fields: tuple[str, ...],
+) -> ProviderPromptResult:
+    try:
+        parsed = _parse_response_content(response)
+        raw_fields = parsed["fields"]
+        fields = {
+            field_name: _parse_field(raw_fields[field_name])
+            for field_name in requested_fields
+        }
+        return ProviderPromptResult(
+            status=VerificationStatus(parsed["status"]),
+            summary=parsed["summary"],
+            fields=fields,
+            model=_model_metadata(
+                model=model,
+                provider_name=provider_name,
+                provider_mode=provider_mode,
+                started=started,
+                attempted_models=attempted_models,
+            ),
+        )
+    except (AttributeError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ProviderError(
+            "The verification service returned an unreadable response. Please try again."
+        ) from exc
+
+
+def _parse_response_content(response: httpx.Response) -> dict:
+    body = response.json()
+    content = body["choices"][0]["message"]["content"]
+    parsed = json.loads(content) if isinstance(content, str) else content
+    if not isinstance(parsed, dict):
+        raise TypeError("Chat completion content did not contain a JSON object.")
+    return parsed
+
+
+def _model_metadata(
+    *,
+    model: str,
+    provider_name: str,
+    provider_mode: str,
+    started: float,
+    attempted_models: list[str],
+) -> ModelMetadata:
+    duration_ms = int((time.perf_counter() - started) * 1000)
+    return ModelMetadata(
+        provider=provider_name,
+        model=model,
+        provider_mode=provider_mode,
+        duration_ms=duration_ms,
+        fallback_attempts=max(0, len(attempted_models) - 1),
+        attempted_models=attempted_models,
+    )
+
+
 def _parse_fields(raw_fields: dict, deterministic_fields: Mapping[str, dict]) -> VerificationFields:
     def build_field(field_name: str) -> VerificationFieldResult:
         field = deterministic_fields.get(field_name) or raw_fields[field_name]
-        evidence = [_parse_evidence_item(item) for item in field.get("evidence", [])]
-        return VerificationFieldResult(
-            status=field["status"],
-            application_value=field.get("application_value"),
-            label_value=field.get("label_value") or field.get("extracted_value"),
-            reason=field.get("reason") or field.get("explanation", ""),
-            evidence=evidence,
-        )
+        return _parse_field(field)
 
     return VerificationFields(
         **{field_name: build_field(field_name) for field_name in VERIFICATION_FIELD_NAMES}
+    )
+
+
+def _parse_field(field: dict) -> VerificationFieldResult:
+    evidence = [_parse_evidence_item(item) for item in field.get("evidence", [])]
+    return VerificationFieldResult(
+        status=field["status"],
+        application_value=field.get("application_value"),
+        label_value=field.get("label_value") or field.get("extracted_value"),
+        reason=field.get("reason") or field.get("explanation", ""),
+        evidence=evidence,
     )
 
 

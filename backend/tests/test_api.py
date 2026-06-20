@@ -1,10 +1,11 @@
+import asyncio
 import json
 import time
 
 import httpx
 from fastapi.testclient import TestClient
 
-from app.core.dependencies import get_batch_service, get_verification_service
+from app.core.dependencies import get_batch_service, get_settings, get_verification_service
 from app.core.settings import Settings
 from app.main import app
 from app.models.application import ApplicationValues
@@ -19,8 +20,9 @@ from app.models.verification import (
 )
 from app.providers.openrouter_provider import OpenRouterVerificationProvider
 from app.providers.local_provider import LocalModelVerificationProvider
-from app.providers.base import ProviderResult
+from app.providers.base import ProviderError, ProviderPromptResult, ProviderResult
 from app.providers.chat_completion_parser import parse_chat_completion_response
+from app.providers.multi_pass_provider import MultiPassVerificationProvider
 from app.services.batch_service import BatchService
 from app.services.result_guard_service import (
     GOVERNMENT_WARNING_FULL_TEXT,
@@ -173,6 +175,33 @@ class ErrorVerificationService:
         )
 
 
+class SpecialistRunner:
+    def __init__(self, omit_fields: set[str] | None = None):
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+        self.omit_fields = omit_fields or set()
+
+    async def run_prompt(self, *, upload, prompt, prompt_name: str) -> ProviderPromptResult:
+        self.calls.append((prompt_name, prompt.requested_fields))
+        source_fields = make_fields()
+        fields = {
+            field_name: getattr(source_fields, field_name)
+            for field_name in prompt.requested_fields
+            if field_name not in self.omit_fields
+        }
+        return ProviderPromptResult(
+            status=VerificationStatus.pass_status,
+            summary=f"{prompt_name} passed.",
+            fields=fields,
+            model=ModelMetadata(
+                provider="test",
+                model=f"test-{prompt_name}",
+                provider_mode="local",
+                duration_ms=10,
+                attempted_models=[f"test-{prompt_name}"],
+            ),
+        )
+
+
 def make_test_client() -> TestClient:
     app.dependency_overrides.clear()
     test_verification_service = TestVerificationService()
@@ -194,6 +223,7 @@ def make_test_client() -> TestClient:
 
 def test_config_endpoint_exposes_safe_limits() -> None:
     app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: Settings(provider_mode="local")
     client = TestClient(app)
 
     response = client.get("/api/config")
@@ -205,6 +235,7 @@ def test_config_endpoint_exposes_safe_limits() -> None:
     assert ".png" in body["allowed_file_types"]
     assert ".pdf" not in body["allowed_file_types"]
     assert "openrouter_api_key" not in body
+    app.dependency_overrides.clear()
 
 
 def test_settings_accept_comma_separated_cors_origins() -> None:
@@ -319,7 +350,9 @@ def test_openrouter_payload_sends_real_image_content() -> None:
 
 
 def test_local_provider_payload_sends_image_without_openrouter_plugins() -> None:
-    provider = LocalModelVerificationProvider(Settings(provider_mode="local"))
+    provider = LocalModelVerificationProvider(
+        Settings(provider_mode="local", local_model_name="qwen2.5-vl-7b-instruct")
+    )
     upload = ValidatedUpload(
         filename="sample.png",
         content_type="image/png",
@@ -472,6 +505,14 @@ def test_prompt_allows_class_type_modifiers_and_obvious_spelling_variants() -> N
     assert "artifical matching artificial" in prompt.system_instruction
 
 
+def test_prompt_forbids_net_contents_inference() -> None:
+    prompt = VerificationPromptService().build_prompt()
+
+    assert "Do not infer common bottle sizes" in prompt.system_instruction
+    assert "barcode" in prompt.system_instruction
+    assert "unless the same quantity/unit is visible" in prompt.system_instruction
+
+
 def test_prompt_requires_word_for_word_government_warning() -> None:
     prompt = VerificationPromptService().build_prompt()
 
@@ -553,6 +594,8 @@ def test_prompt_targets_domestic_country_of_origin_check() -> None:
     assert "Application says Domestic" in prompt.system_instruction
     assert "Product of" in prompt.system_instruction
     assert "does not show an imported origin" in prompt.system_instruction
+    assert "No imported origin statement visible" in prompt.system_instruction
+    assert "do not use N/A" in prompt.system_instruction
 
 
 def test_prompt_targets_country_name_origin_check() -> None:
@@ -808,6 +851,73 @@ def test_parser_fills_backend_deterministic_fields() -> None:
     assert "Backend applicability" in result.fields.alcohol_content.reason
 
 
+def test_multi_pass_provider_runs_three_specialists_and_merges_fields() -> None:
+    runner = SpecialistRunner()
+    provider = MultiPassVerificationProvider(
+        runner=runner,
+        prompt_service=VerificationPromptService(),
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    result = asyncio.run(
+        provider.verify(
+            upload=upload,
+            item_id="sample",
+            application_values=ApplicationValues(
+                beverage_class="spirits",
+                class_type_designation="Gin",
+                alcohol_content="40% Alc/Vol",
+                country_of_origin="Domestic",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.artifact_legibility.status == "pass"
+    assert result.fields.government_warning.label_value == GOVERNMENT_WARNING_FULL_TEXT
+    assert result.fields.color_additive_disclosure.application_value == "Not Required"
+    assert result.model.model.startswith("multi-pass(")
+    assert [name for name, _fields in runner.calls] == [
+        "warning_legibility",
+        "product_fields",
+        "origin_fields",
+    ]
+    assert runner.calls[0][1] == ("artifact_legibility", "government_warning")
+    assert runner.calls[1][1] == (
+        "brand_name",
+        "class_type_designation",
+        "alcohol_content",
+        "net_contents",
+    )
+    assert runner.calls[2][1] == ("name_address", "country_of_origin")
+
+
+def test_multi_pass_provider_fails_when_specialist_omits_required_field() -> None:
+    runner = SpecialistRunner(omit_fields={"government_warning"})
+    provider = MultiPassVerificationProvider(
+        runner=runner,
+        prompt_service=VerificationPromptService(),
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    try:
+        asyncio.run(provider.verify(upload=upload, item_id="sample"))
+    except ProviderError as exc:
+        assert "government_warning" in exc.message
+    else:
+        raise AssertionError("Expected missing specialist field to raise ProviderError.")
+
+
 def test_result_guard_fails_non_abv_text_for_alcohol_content() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(
@@ -976,7 +1086,94 @@ def test_result_guard_fails_partial_government_warning_text() -> None:
     assert result.status == VerificationStatus.fail
     assert result.summary == "Required checks failed: government warning."
     assert result.fields.government_warning.status == "fail"
-    assert "exact federal warning text" in result.fields.government_warning.reason
+    assert "because" in result.fields.government_warning.reason
+
+
+def test_result_guard_allows_warning_spacing_ocr_variants() -> None:
+    compact_warning = (
+        "GOVERNMENT WARNING:(1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD "
+        "NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK "
+        "OF BIRTH DEFECTS.(2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR "
+        "ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    )
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "government_warning": make_field(
+                        application_value="Required federal government warning",
+                        label_value=compact_warning,
+                        reason="Warning text is present.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.government_warning.status == "pass"
+
+
+def test_result_guard_reports_first_warning_word_mismatch() -> None:
+    altered_warning = GOVERNMENT_WARNING_FULL_TEXT.replace("Surgeon", "Attorney")
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "government_warning": make_field(
+                        application_value="Required federal government warning",
+                        label_value=altered_warning,
+                        reason="Model incorrectly accepted changed warning.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert "surgeon" in result.fields.government_warning.reason
+    assert "attorney" in result.fields.government_warning.reason
+
+
+def test_result_guard_allows_domestic_origin_without_origin_statement() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "country_of_origin": make_field(
+                        application_value="Domestic",
+                        label_value="N/A",
+                        reason="No imported origin statement is visible on this domestic label.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.country_of_origin.status == "pass"
+    assert result.fields.country_of_origin.label_value == "No imported origin statement visible"
 
 
 def test_result_guard_allows_artifact_legibility_application_na() -> None:

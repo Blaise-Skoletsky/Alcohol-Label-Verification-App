@@ -26,6 +26,11 @@ statement, the visible prefix `GOVERNMENT WARNING:` must be all caps and visibly
 bold, and approximate wording, title-case headings, missing text, or unreadable
 warning text must fail.
 
+Each verification currently fans out into three parallel model calls for one
+image: warning/legibility, product fields, and origin fields. The backend then
+merges those specialist results into the existing response shape and applies the
+result guard before returning the final pass/fail status.
+
 Most other fields require compliance judgment rather than blind string matching.
 For example, capitalization and punctuation-only differences in a brand name can
 pass when the wording is substantively the same. The government warning is the

@@ -13,6 +13,15 @@ class VerificationPrompt:
 
 
 @dataclass(frozen=True, slots=True)
+class SpecialistVerificationPrompt:
+    name: str
+    system_instruction: str
+    user_instruction: str
+    requested_fields: tuple[str, ...]
+    deterministic_fields: Mapping[str, dict]
+
+
+@dataclass(frozen=True, slots=True)
 class VerificationPlan:
     requested_fields: tuple[str, ...]
     deterministic_fields: Mapping[str, dict]
@@ -31,6 +40,45 @@ class VerificationPromptService:
             user_instruction=self._user(application_values, plan),
             requested_fields=plan.requested_fields,
             deterministic_fields=plan.deterministic_fields,
+        )
+
+    def build_specialist_prompts(
+        self,
+        application_values: ApplicationValues | None = None,
+    ) -> tuple[SpecialistVerificationPrompt, ...]:
+        plan = self._build_plan(application_values)
+        requested = set(plan.requested_fields)
+        specialist_fields = {
+            "warning_legibility": (
+                "artifact_legibility",
+                "government_warning",
+            ),
+            "product_fields": tuple(
+                field
+                for field in (
+                    "brand_name",
+                    "class_type_designation",
+                    "alcohol_content",
+                    "net_contents",
+                    "color_additive_disclosure",
+                )
+                if field in requested
+            ),
+            "origin_fields": (
+                "name_address",
+                "country_of_origin",
+            ),
+        }
+        return tuple(
+            SpecialistVerificationPrompt(
+                name=name,
+                system_instruction=self._specialist_system(plan, name, fields),
+                user_instruction=self._specialist_user(application_values, name, fields),
+                requested_fields=fields,
+                deterministic_fields=plan.deterministic_fields,
+            )
+            for name, fields in specialist_fields.items()
+            if fields
         )
 
     # ------------------------------------------------------------------
@@ -73,6 +121,50 @@ class VerificationPromptService:
         ]
         return "\n\n".join(section for section in sections if section)
 
+    def _specialist_system(
+        self,
+        plan: VerificationPlan,
+        specialist_name: str,
+        requested_fields: tuple[str, ...],
+    ) -> str:
+        field_sections = {
+            "artifact_legibility": self._field_artifact_legibility(),
+            "brand_name": self._field_brand_name(),
+            "class_type_designation": self._field_class_type_designation(),
+            "alcohol_content": self._field_alcohol_content(plan.alcohol_mode),
+            "net_contents": self._field_net_contents(),
+            "name_address": self._field_name_address(),
+            "country_of_origin": self._field_country_of_origin(plan.country_mode),
+            "color_additive_disclosure": self._field_color_additive_disclosure(),
+            "government_warning": self._field_government_warning(),
+        }
+        sections = [
+            (
+                "You are the "
+                f"{specialist_name} specialist for TTB-style alcohol label artwork. "
+                "Return JSON only. The image is label artwork only; never extract "
+                "application values from it. Use only visible label text for "
+                "label_value and evidence."
+            ),
+            (
+                "Government warning is strict and label-only: pass only when the label shows "
+                "the exact federal warning statement word-for-word, with no missing, changed, "
+                "reordered, or paraphrased words. The prefix 'GOVERNMENT WARNING:' must be "
+                "all caps and visibly bold. For government_warning.label_value, transcribe the "
+                "full visible warning statement when it is readable; preserve the prefix letter "
+                "case exactly as printed and never rewrite a lowercase, title-case, or mixed-case "
+                "prefix into all caps."
+            )
+            if "government_warning" in requested_fields
+            else "",
+            self._task_intro(),
+            self._overall_verdict_rules(),
+            *[field_sections[field] for field in requested_fields],
+            self._output_format(requested_fields),
+            self._hard_rules(),
+        ]
+        return "\n\n".join(section for section in sections if section)
+
     # ------------------------------------------------------------------
     # User instruction
     # ------------------------------------------------------------------
@@ -88,6 +180,22 @@ class VerificationPromptService:
             "label_value and evidence; do not infer or fill missing label text from the rules. "
             "Return only the requested fields: "
             f"{', '.join(plan.requested_fields)}.\n\n"
+            "APPLICATION_VALUES_JSON:\n"
+            f"{self._application_values_json(application_values)}"
+        )
+
+    def _specialist_user(
+        self,
+        application_values: ApplicationValues | None,
+        specialist_name: str,
+        requested_fields: tuple[str, ...],
+    ) -> str:
+        return (
+            "Review the attached label artwork image using only your assigned "
+            f"{specialist_name} rules. Compare only against APPLICATION_VALUES_JSON below. "
+            "Use visible label text only for label_value and evidence; do not infer or fill "
+            "missing label text from the rules. Return only these field keys: "
+            f"{', '.join(requested_fields)}.\n\n"
             "APPLICATION_VALUES_JSON:\n"
             f"{self._application_values_json(application_values)}"
         )
@@ -224,6 +332,10 @@ cannot be evaluated confidently."""
 FIELD 5 - net_contents:
 Compare APPLICATION_VALUES_JSON.net_contents to net contents printed on the label.
 PASS: Same quantity and unit, allowing formatting differences like 750 mL/750ml.
+Pass only when the exact quantity and unit are visibly printed as net contents on
+the label. Do not infer common bottle sizes from the application value, barcode,
+UPC digits, container shape, or product category. Do not use an application value
+as label_value unless the same quantity/unit is visible on the label.
 FAIL: Missing, partly legible, different quantity/unit, outside the visible label,
 or requires metric/customary conversion."""
 
@@ -251,6 +363,8 @@ city/state/country, or unclear importer/domestic attribution."""
 FIELD 7 - country_of_origin:
 Application says Domestic. PASS if the label does not show an imported origin
 statement. A label with no country-of-origin statement can pass for Domestic.
+When passing Domestic because no imported origin statement is visible, set
+label_value exactly to "No imported origin statement visible"; do not use N/A.
 FAIL if the label says Product of, Imported from, Made in a foreign country, or
 otherwise indicates imported origin."""
 

@@ -27,7 +27,7 @@ class ResultGuardService:
             alcohol_content=self._guard_alcohol_content(result.fields.alcohol_content),
             net_contents=self._guard_required_values(result.fields.net_contents),
             name_address=self._guard_required_values(result.fields.name_address),
-            country_of_origin=self._guard_required_values(result.fields.country_of_origin),
+            country_of_origin=self._guard_country_of_origin(result.fields.country_of_origin),
             color_additive_disclosure=self._guard_required_values(
                 result.fields.color_additive_disclosure
             ),
@@ -80,10 +80,7 @@ class ResultGuardService:
             return field.model_copy(
                 update={
                     "status": "fail",
-                    "reason": (
-                        "Government warning can pass only when the exact federal "
-                        "warning text is visible word-for-word with no missing or changed words."
-                    ),
+                    "reason": self._warning_mismatch_reason(body),
                 }
             )
 
@@ -98,6 +95,16 @@ class ResultGuardService:
                 }
             )
         return field
+
+    def _guard_country_of_origin(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if self._is_domestic_no_origin_pass(field):
+            return field.model_copy(
+                update={
+                    "status": "pass",
+                    "label_value": "No imported origin statement visible",
+                }
+            )
+        return self._guard_required_values(field)
 
     def _guard_alcohol_content(self, field: VerificationFieldResult) -> VerificationFieldResult:
         if self._is_backend_not_required(field):
@@ -137,6 +144,29 @@ class ResultGuardService:
         if not normalized:
             return False
         return normalized not in {"n/a", "na", "none", "unknown", "unreadable", "missing"}
+
+    def _is_domestic_no_origin_pass(self, field: VerificationFieldResult) -> bool:
+        if field.status != "pass":
+            return False
+        application_value = (field.application_value or "").strip().lower()
+        if application_value != "domestic":
+            return False
+        combined = " ".join(
+            [
+                field.label_value or "",
+                field.reason or "",
+                " ".join(evidence.summary for evidence in field.evidence),
+            ]
+        ).lower()
+        no_origin_markers = [
+            "no imported origin",
+            "no import origin",
+            "no country-of-origin statement",
+            "no country of origin statement",
+            "no foreign origin",
+            "domestic",
+        ]
+        return any(marker in combined for marker in no_origin_markers)
 
     def _has_clear_exception(self, field: VerificationFieldResult) -> bool:
         application_value = (field.application_value or "").lower()
@@ -199,14 +229,32 @@ class ResultGuardService:
         return re.fullmatch(r"\s*\d+(?:[\.,]\d+)?\s*", value) is not None
 
     def _normalized_warning_body_matches(self, value: str) -> bool:
-        actual = self._normalize_warning_text(value)
-        expected = self._normalize_warning_text(GOVERNMENT_WARNING_BODY)
-        return actual.startswith(expected)
+        actual = self._warning_tokens(value)
+        expected = self._warning_tokens(GOVERNMENT_WARNING_BODY)
+        return actual[: len(expected)] == expected
 
-    def _normalize_warning_text(self, value: str) -> str:
+    def _warning_mismatch_reason(self, value: str) -> str:
+        actual = self._warning_tokens(value)
+        expected = self._warning_tokens(GOVERNMENT_WARNING_BODY)
+        for index, expected_token in enumerate(expected):
+            if index >= len(actual):
+                return (
+                    "Government warning is missing required text starting at "
+                    f"'{expected_token}'."
+                )
+            if actual[index] != expected_token:
+                return (
+                    "Government warning text differs at "
+                    f"'{expected_token}'; label shows '{actual[index]}'."
+                )
+        return (
+            "Government warning can pass only when the exact federal warning text "
+            "is visible word-for-word with no missing or changed words."
+        )
+
+    def _warning_tokens(self, value: str) -> list[str]:
         normalized = value.replace("\u00a0", " ")
-        normalized = re.sub(r"\s+", " ", normalized)
-        return normalized.strip().lower()
+        return re.findall(r"[a-z0-9]+|[^\w\s]", normalized.lower())
 
     def _overall_status(self, fields: VerificationFields) -> VerificationStatus:
         field_statuses = [
