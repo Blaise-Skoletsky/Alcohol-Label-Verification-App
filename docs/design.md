@@ -4,19 +4,56 @@ This document describes how the prototype should behave at runtime. The proposal
 
 # Runtime Flow
 
-- The user uploads one PNG or JPG image per verification item.
-- Each uploaded item must contain both the label application and the label artwork in the same visual artifact.
-- The frontend sends the combined application+label file to FastAPI.
+- The user creates one verification item by uploading label artwork and filling out structured application text fields in the app.
+- The primary uploaded file is the label artwork only. The application values come from form fields rather than OCR from an application image.
+- The frontend sends the label image and application-data form payload to FastAPI.
 - The frontend does not call model providers directly.
-- FastAPI validates file type and file size before processing.
-- The backend calls the configured vision provider with the combined application+label artifact.
-- The model must identify when the application portion or label artwork portion is missing, unreadable, or ambiguous.
-- The model returns structured JSON containing extracted values, pass/fail/needs-review statuses, reasons, and evidence.
+- FastAPI validates file type, file size, and form shape before processing.
+- The backend calls the configured vision provider with the label artwork plus the normalized application-data payload.
+- The model must identify when the label artwork is missing, unreadable, ambiguous, or insufficient to verify a field against the submitted application data.
+- The model returns structured JSON containing extracted values, pass/fail statuses, reasons, and evidence.
 - The backend normalizes and validates the model output before returning a result to the UI.
 - The UI shows a compact result summary first, with visible evidence available for each field.
 - The UI may keep recent client-side history in browser storage for up to one day. This history must not require server-side persistence.
-- Supported combined application+label file types for the prototype are PNG and JPG/JPEG.
+- Supported label-artwork file types for the prototype are PNG and JPG/JPEG.
 - The demo flow is stateless and does not require accounts or per-user server-side history.
+- Requests without either a label image or the required application-text fields are invalid.
+
+# Verification Inputs
+
+The primary form collects hard text inputs for these application values:
+
+- Brand name
+- Class/type designation
+- Alcohol content, when required for the beverage class
+- Net contents
+- Name and address of bottler/producer
+- Country of origin for imports
+
+The form does not collect a government-warning value. The backend passes a fixed
+regulatory expectation into the prompt, and the model checks whether the label
+itself contains the exact required warning.
+
+The provider call should receive one structured payload per verification item:
+label image plus normalized application values. The UI should not expose or model
+the workflow as separate OpenRouter queries; provider routing is a backend
+implementation detail.
+
+# Comparison Rules
+
+- Brand name comparison allows capitalization and punctuation-only differences
+  when the substantive words are the same.
+- Class/type comparison allows a label to state a more specific recognized type
+  within the application class.
+- Alcohol-content comparison uses numeric normalization and applies the documented
+  wine and malt-beverage exceptions.
+- Net contents, name/address, and import country-of-origin checks compare the
+  submitted application text to label evidence and return `fail` when the label is
+  too ambiguous to decide.
+- Government warning comparison is exact. The label must show the complete federal
+  warning statement, and the visible prefix `GOVERNMENT WARNING:` must be all caps
+  and visibly bold. Missing, unreadable, title-case, approximate, rewritten, or
+  partially visible warning text returns `fail`.
 
 # UI and User Experience
 
@@ -24,11 +61,12 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
 
 ## Primary Layout
 
-- The first screen contains an upload area at the top.
+- The first screen contains the primary verification workflow: label-artwork upload plus application-data form fields.
 - Results appear directly below the upload area.
-- Uploading one or many combined application+label files creates one result row per file.
-- The upload control should make the expected artifact obvious without requiring a long explanation.
+- Submitting one or many verification items creates one result row per item.
+- The upload and form controls should make the expected inputs obvious without requiring a long explanation.
 - The user should understand the screen without reading instructions.
+- The exact form layout is still open. It may be a single form, a stepper, an expandable panel next to the upload area, or another simple structure that preserves the core workflow.
 
 ## Result Rows
 
@@ -38,7 +76,6 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
 - Rows should use familiar status indicators:
   - Green check for clear/pass.
   - Red X for fail or likely rejection.
-  - Yellow warning for needs-review/manual verification.
   - Loading indicator for queued or processing.
 - A row becomes clickable when enough information is available to inspect it.
 - The list should remain useful when many items are present, so rows need to be compact and scannable.
@@ -46,13 +83,14 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
 ## Detail View
 
 - Clicking a result row opens a detail modal or focused detail panel.
-- The detail view shows the submitted combined application+label artifact and the verification summary together.
+- The detail view shows the submitted label image, the submitted application-data snapshot, and the verification summary together.
 - The summary shows each checked requirement with a status:
   - Green/pass when the field matches.
   - Red/fail when the field does not match.
-  - Yellow/needs-review when the system cannot confidently decide.
-- The detail view must make the evidence visible: extracted label value, application value, reason, and supporting evidence.
-- The detail view should not hide failed or needs-review fields behind extra clicks.
+- The detail view must make the evidence visible: extracted label value, entered application value, reason, and supporting evidence.
+- For the government warning, the entered application value should be displayed as
+  the fixed federal warning requirement rather than as user-entered text.
+- The detail view should not hide failed fields behind extra clicks.
 
 ## Navigation
 
@@ -71,20 +109,21 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
 
 # Batch Processing
 
-- Batch upload supports up to the configured maximum item count, initially 400 combined application+label files in one user action.
+- Batch submission supports up to the configured maximum item count, initially 400 verification items in one user action.
+- A batch item is a label-artwork image plus its corresponding application-data form values or imported structured row.
 - Batch submission returns quickly with a batch identifier instead of blocking until all labels finish.
 - Each batch item is processed as an independent job with its own status and result.
 - Provider calls pass through a bounded queue with an initial application default of five concurrent model calls.
 - The queue must prevent large-batch fanout, including hundreds of simultaneous OpenRouter calls in cloud mode.
 - The first processing wave should be small enough to return initial results within the single-label latency target when the provider is healthy.
-- Batch results must be shown incrementally as each item completes. The UI must not wait for the entire batch before showing the first successful, failed, or needs-review result.
+- Batch results must be shown incrementally as each item completes. The UI must not wait for the entire batch before showing the first successful or failed result.
 - The reviewer should be able to begin work as soon as the first completed results are available.
 - Interactive single-label requests should have priority over background batch work.
 - Failed items must be isolated so one bad image, malformed row, timeout, or provider failure does not fail the whole batch.
 - For the initial demo, the queue can be in-process only if the README clearly states that in-flight batches are not durable across restarts.
 - Batch progress should feel smooth in the UI. Prefer server-sent events for batch progress updates if the implementation stays simple in a single-container Azure App Service deployment; otherwise use short-interval polling as the fallback.
 - The default architecture is stateless and must not store label artwork or application data in cloud storage.
-- The expected demo load is one to two concurrent users, with the primary stress case being one user uploading 100-400 combined application+label files while processing proceeds five at a time.
+- The expected demo load is one to two concurrent users, with the primary stress case being one user submitting 100-400 label images with corresponding application data while processing proceeds five at a time.
 - If durable batch processing is intentionally added later, Azure Blob Storage, Azure Queue Storage, and Azure Table Storage, Cosmos DB, or Postgres are the likely Azure-native options.
 
 # Model Strategy

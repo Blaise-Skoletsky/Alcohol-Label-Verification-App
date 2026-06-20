@@ -4,6 +4,7 @@ from base64 import b64encode
 import httpx
 
 from app.core.settings import Settings
+from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.providers.base import ProviderError, ProviderResult
 from app.providers.chat_completion_parser import parse_chat_completion_response
@@ -22,9 +23,14 @@ class LocalModelVerificationProvider:
         self._provider_url = settings.local_model_base_url
         self._model = settings.local_model_name
 
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> ProviderResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: ApplicationValues | None = None,
+    ) -> ProviderResult:
         started = time.perf_counter()
-        payload = self._build_payload(upload=upload)
+        payload = self._build_payload(upload=upload, application_values=application_values)
         headers = {"Content-Type": "application/json"}
 
         try:
@@ -52,8 +58,14 @@ class LocalModelVerificationProvider:
                 "We could not reach the local model. Please start the local model server and try again."
             ) from exc
 
-    def _build_payload(self, upload: ValidatedUpload) -> dict:
-        prompt = self._prompt_service.build_prompt()
+    def _build_payload(
+        self,
+        upload: ValidatedUpload,
+        application_values: ApplicationValues | None = None,
+    ) -> dict:
+        prompt = self._prompt_service.build_prompt(
+            application_values.to_prompt_mapping() if application_values else None
+        )
         return {
             "model": self._model,
             "messages": [

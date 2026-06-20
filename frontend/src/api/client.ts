@@ -8,6 +8,19 @@ export class ApiError extends Error {
   }
 }
 
+// The seven reviewer-entered application values sent alongside the label image.
+export type ApplicationValuePayload = {
+  brand_name?: string;
+  beverage_class?: "spirits" | "wine" | "malt";
+  class_type_designation?: string;
+  alcohol_content?: string;
+  net_contents?: string;
+  name_address?: string;
+  country_of_origin?: string;
+};
+
+export type BatchRowPayload = ApplicationValuePayload & { filename: string };
+
 export async function getConfig() {
   const response = await fetch("/api/config");
   if (!response.ok) {
@@ -16,9 +29,18 @@ export async function getConfig() {
   return response.json() as Promise<unknown>;
 }
 
-export async function verifySingle(file: File) {
+function appendValues(formData: FormData, values: ApplicationValuePayload) {
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      formData.append(key, value);
+    }
+  }
+}
+
+export async function verifyRow(file: File, values: ApplicationValuePayload = {}) {
   const formData = new FormData();
   formData.append("file", file);
+  appendValues(formData, values);
 
   const response = await fetch("/api/verify", {
     method: "POST",
@@ -26,17 +48,18 @@ export async function verifySingle(file: File) {
   });
 
   if (!response.ok) {
-    throw await buildApiError(response, "The review service could not process this file.");
+    throw await buildApiError(response, "The review service could not process this label.");
   }
 
   return response.json() as Promise<unknown>;
 }
 
-export async function submitBatch(files: File[]) {
+export async function submitBatch(files: File[], rows: BatchRowPayload[]) {
   const formData = new FormData();
   for (const file of files) {
     formData.append("files", file);
   }
+  formData.append("rows", JSON.stringify(rows));
 
   const response = await fetch("/api/batches", {
     method: "POST",
@@ -56,6 +79,28 @@ export async function getBatch(batchId: string) {
     throw await buildApiError(response, "We could not load the latest batch status.");
   }
   return response.json() as Promise<unknown>;
+}
+
+export type ParsedSheet = {
+  columns: string[];
+  rows: Array<Record<string, string>>;
+  row_count: number;
+};
+
+export async function parseSheet(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch("/api/sheets/parse", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw await buildApiError(response, "We could not read this spreadsheet.");
+  }
+
+  return response.json() as Promise<ParsedSheet>;
 }
 
 async function buildApiError(response: Response, fallbackMessage: string) {

@@ -4,6 +4,7 @@ from base64 import b64encode
 import httpx
 
 from app.core.settings import Settings
+from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.providers.base import ProviderError, ProviderResult
 from app.providers.chat_completion_parser import parse_chat_completion_response
@@ -23,7 +24,12 @@ class OpenRouterVerificationProvider:
         self._models = settings.openrouter_models
         self._api_key = settings.openrouter_api_key
 
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> ProviderResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: ApplicationValues | None = None,
+    ) -> ProviderResult:
         if not self._api_key:
             raise ProviderError(
                 "Verification is not configured yet. Please add the OpenRouter API key on the backend.",
@@ -41,7 +47,9 @@ class OpenRouterVerificationProvider:
         async with httpx.AsyncClient(timeout=self._settings.provider_timeout_seconds) as client:
             for model in self._models:
                 attempted_models.append(model)
-                payload = self._build_payload(model=model, upload=upload)
+                payload = self._build_payload(
+                    model=model, upload=upload, application_values=application_values
+                )
                 try:
                     response = await client.post(
                         self._provider_url,
@@ -86,8 +94,15 @@ class OpenRouterVerificationProvider:
         models = self._models
         return models.index(current_model) < len(models) - 1
 
-    def _build_payload(self, model: str, upload: ValidatedUpload) -> dict:
-        prompt = self._prompt_service.build_prompt()
+    def _build_payload(
+        self,
+        model: str,
+        upload: ValidatedUpload,
+        application_values: ApplicationValues | None = None,
+    ) -> dict:
+        prompt = self._prompt_service.build_prompt(
+            application_values.to_prompt_mapping() if application_values else None
+        )
         content = [{"type": "text", "text": prompt.user_instruction}]
         content.append(self._build_artifact_part(upload))
         payload = {

@@ -3,6 +3,7 @@ from functools import lru_cache
 from app.core.settings import Settings, get_settings
 from app.providers.factory import build_provider
 from app.services.batch_service import BatchService
+from app.services.sheet_service import SheetService
 from app.services.upload_service import UploadService
 from app.services.verification_prompt_service import VerificationPromptService
 from app.services.verification_service import VerificationService
@@ -11,6 +12,11 @@ from app.services.verification_service import VerificationService
 @lru_cache
 def get_upload_service() -> UploadService:
     return UploadService()
+
+
+@lru_cache
+def get_sheet_service() -> SheetService:
+    return SheetService()
 
 
 @lru_cache
@@ -40,11 +46,13 @@ def get_batch_service() -> BatchService:
 __all__ = [
     "BatchService",
     "Settings",
+    "SheetService",
     "UploadService",
     "VerificationPromptService",
     "VerificationService",
     "get_batch_service",
     "get_settings",
+    "get_sheet_service",
     "get_upload_service",
     "get_verification_prompt_service",
     "get_verification_service",

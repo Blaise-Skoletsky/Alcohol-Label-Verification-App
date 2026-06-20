@@ -35,8 +35,8 @@ class ResultGuardService:
         ):
             return field.model_copy(
                 update={
-                    "status": "needs_review",
-                    "reason": "A passing field must include reviewable application and label values.",
+                    "status": "fail",
+                    "reason": "A passing field must include readable application and label values.",
                 }
             )
         return field
@@ -54,8 +54,8 @@ class ResultGuardService:
         if application_abv is None or label_abv is None:
             return field.model_copy(
                 update={
-                    "status": "needs_review",
-                    "reason": "Alcohol content could not be confidently extracted as an alcohol-content value.",
+                    "status": "fail",
+                    "reason": "Alcohol content could not be extracted as a readable alcohol-content value.",
                 }
             )
 
@@ -129,8 +129,6 @@ class ResultGuardService:
         ]
         if "fail" in field_statuses:
             return VerificationStatus.fail
-        if "needs_review" in field_statuses:
-            return VerificationStatus.needs_review
         return VerificationStatus.pass_status
 
     def _summary(
@@ -145,10 +143,6 @@ class ResultGuardService:
         failed_fields = self._field_labels(fields, "fail")
         if failed_fields:
             return f"Required checks failed: {', '.join(failed_fields)}."
-
-        review_fields = self._field_labels(fields, "needs_review")
-        if review_fields:
-            return f"Manual review needed: {', '.join(review_fields)}."
 
         return original_summary
 

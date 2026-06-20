@@ -68,7 +68,8 @@ ollama create qwen2.5vl-alv:latest -f $modelfile
 Remove-Item -LiteralPath $modelfile -Force
 ```
 
-The larger context window matters because full-page label/application images plus the verification prompt can exceed Ollama's default context size.
+The larger context window matters because label artwork plus structured application
+data and the verification prompt can exceed Ollama's default context size.
 
 Alternative local option: LM Studio.
 
@@ -145,9 +146,12 @@ Expected config includes:
 
 Before testing a large batch:
 
-1. Upload one PNG or JPG containing both the application and label artwork.
-2. Confirm the result completes.
-3. Check the app logs if the result is a processing error.
+1. Upload one PNG or JPG label image.
+2. Fill out the application-text fields: brand name, class/type designation,
+   alcohol content when required, net contents, name/address, and import country
+   of origin when applicable.
+3. Confirm the result completes.
+4. Check the app logs if the result is a processing error.
 
 Logs:
 
@@ -172,7 +176,7 @@ MAX_BATCH_COUNT=400
 BATCH_CONCURRENCY=1
 ```
 
-`MAX_BATCH_COUNT` controls how many files the app accepts in one batch.
+`MAX_BATCH_COUNT` controls how many verification items the app accepts in one batch.
 
 `BATCH_CONCURRENCY` controls how many model calls run at the same time. For local models, this is the setting most likely to overload the machine.
 

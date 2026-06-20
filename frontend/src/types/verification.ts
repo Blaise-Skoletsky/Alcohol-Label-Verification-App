@@ -1,21 +1,25 @@
 export type UiStatus =
+  | "draft"
   | "queued"
   | "processing"
   | "pass"
   | "fail"
-  | "needs-review"
   | "processing-error";
 
+export type BeverageClass = "spirits" | "wine" | "malt";
+
+export type FieldKey =
+  | "artifact_legibility"
+  | "brand_name"
+  | "class_type_designation"
+  | "alcohol_content"
+  | "net_contents"
+  | "name_address"
+  | "country_of_origin"
+  | "government_warning";
+
 export type FieldSummary = {
-  key:
-    | "artifact_legibility"
-    | "brand_name"
-    | "class_type_designation"
-    | "alcohol_content"
-    | "net_contents"
-    | "name_address"
-    | "country_of_origin"
-    | "government_warning";
+  key: FieldKey;
   label: string;
   status: UiStatus;
   applicationValue: string;
@@ -24,6 +28,34 @@ export type FieldSummary = {
   evidence: string[];
 };
 
+// A single label in the working table: the reviewer-entered application values
+// plus the latest verification result. This is the core unit of the redesign —
+// the user types the values, attaches an image, and the model compares them.
+export type LabelRow = {
+  localId: string;
+  brand: string;
+  beverageClass: BeverageClass;
+  classType: string;
+  abv: string;
+  net: string;
+  nameAddr: string;
+  country: string;
+  fileName: string;
+  imageUrl: string | null;
+  imageFile: File | null;
+  // Sample labels are referenced by URL and fetched into a File at verify time.
+  sampleUrl: string | null;
+  status: UiStatus;
+  fields: FieldSummary[] | null;
+  summary: string;
+  updatedAtLabel: string;
+  flagged: boolean;
+  edited: boolean;
+  serverId?: string;
+  batchId?: string;
+};
+
+// Retained for the result-normalization helpers (single + batch responses).
 export type BatchItem = {
   localId: string;
   serverId?: string;
@@ -42,13 +74,13 @@ export type BatchItem = {
   isPolling: boolean;
 };
 
-export const FIELD_DEFS: Array<{ key: FieldSummary["key"]; label: string }> = [
-  { key: "brand_name", label: "Brand name" },
-  { key: "government_warning", label: "Government warning" },
-  { key: "alcohol_content", label: "Alcohol content" },
-  { key: "net_contents", label: "Net contents" },
-  { key: "class_type_designation", label: "Class/type designation" },
-  { key: "name_address", label: "Name & address" },
-  { key: "country_of_origin", label: "Country of origin" },
-  { key: "artifact_legibility", label: "Artifact legibility" },
+export const FIELD_DEFS: Array<{ key: FieldKey; label: string; short: string }> = [
+  { key: "brand_name", label: "Brand name", short: "Brand" },
+  { key: "government_warning", label: "Government warning", short: "Gov" },
+  { key: "alcohol_content", label: "Alcohol content", short: "ABV" },
+  { key: "net_contents", label: "Net contents", short: "Net" },
+  { key: "class_type_designation", label: "Class/type designation", short: "Type" },
+  { key: "name_address", label: "Name & address", short: "Addr" },
+  { key: "country_of_origin", label: "Country of origin", short: "Origin" },
+  { key: "artifact_legibility", label: "Artifact legibility", short: "Read" },
 ];

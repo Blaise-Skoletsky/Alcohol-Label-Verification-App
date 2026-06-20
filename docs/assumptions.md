@@ -36,23 +36,43 @@ This prototype is intended for a Treasury-facing rollout demo. The preferred pat
 
 - The app is a verification aid, not final legal approval or TTB certification.
 - The UI should stay simple enough for non-technical compliance users.
-- The current workflow uses one uploaded PNG or JPG image containing both the application and the label artwork.
-- The model is responsible for flagging uploads where the application portion or label artwork portion is missing, unreadable, or ambiguous.
+- The target workflow uses one uploaded label-artwork PNG or JPG plus structured application data entered by the user in the app as hard text inputs.
+- Every verification item must include both a label photo and the required text inputs.
+- The model is responsible for flagging uploads where the label artwork is missing, unreadable, ambiguous, or insufficient to verify against the submitted application data.
+- The app is responsible for validating that required application-data fields are present and shaped correctly before asking the model to compare them to the label.
 - The primary demo traffic assumption is one to two concurrent users.
-- The main stress case is one user uploading roughly 100-400 combined application+label files in a batch.
+- The main stress case is one user submitting roughly 100-400 label images with corresponding application-data entries in a batch.
 - Batch upload size and model-call concurrency are separate. A large upload should process through a small bounded worker pool, initially five concurrent model calls.
 - Batch results should appear incrementally as soon as individual labels complete so a reviewer can begin working before the full batch finishes.
-- The app should support PNG and JPG/JPEG combined application+label artifacts.
-- Real public or user-provided label/application examples are preferred for tests. Synthetic labels are not the primary fixture strategy.
+- The app should support PNG and JPG/JPEG label-artwork uploads.
+- Real public or user-provided label artwork and application-data examples are preferred for tests. Synthetic labels are not the primary fixture strategy.
+
+## Structured Input Assumptions
+
+The user provides the label image plus the application text needed to verify every
+requirement except the government warning. These values are submitted as data to
+the backend, not as provider-specific OpenRouter controls.
+
+Required application-text fields for the primary workflow:
+
+- Brand name
+- Class/type designation
+- Alcohol content, when required for the beverage class
+- Net contents
+- Name and address of bottler/producer
+- Country of origin for imported products
+
+The government warning has no user-entered comparison value. The model checks only
+whether the exact required warning appears on the uploaded label.
 
 ## Verification Rule Assumptions (TTB Mandatory Label Information)
 
-The app checks eight fields against TTB mandatory-labeling requirements. The rules
-below explain which checks are unconditional and which are class-dependent, so a
-grader can understand why a given label passes, fails, or is sent to review. The
-three beverage classes are **distilled spirits** (27 CFR Part 5), **wine** (27 CFR
-Part 4), and **malt beverages / beer** (27 CFR Part 7). The federal health warning
-is governed by 27 CFR Part 16.
+The app checks seven mandatory-labeling requirement groups. The rules below
+explain which checks are unconditional and which are class-dependent, so a grader
+can understand why a given label passes or fails. The three
+beverage classes are **distilled spirits** (27 CFR Part 5), **wine** (27 CFR Part
+4), and **malt beverages / beer** (27 CFR Part 7). The federal health warning is
+governed by 27 CFR Part 16.
 
 - **Net contents is mandatory for all three classes** and is never skipped. We do
   not treat beer as exempt — net contents is required for malt beverages just as it
@@ -77,13 +97,24 @@ is governed by 27 CFR Part 16.
   passes when the type is a recognized member of the application's class. Only a
   genuinely different class (e.g. application "Wine" but label "Vodka") fails.
 - **Brand name** allows capitalization and punctuation-only differences but fails
-  substantive wording changes.
+  substantive wording changes. For example, `STONE'S THROW` and `Stone's Throw`
+  can pass when the words are the same, but a different brand phrase fails.
 - **Government warning** must match the exact federal statement. The required text
-  is hardcoded (the application value is fixed), so the check is purely whether the
-  full statement appears, readable, on the label.
+  is hardcoded, so the check is purely whether the full statement appears,
+  readable, on the label:
+
+```text
+GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.
+```
+
+  The visible prefix `GOVERNMENT WARNING:` must be all caps and visibly bold.
+  Title case, approximate wording, missing punctuation or numbered clauses,
+  creative rewrites, or unreadable warning text fail.
 - **Conservative default:** when a required value is missing, unreadable, or the
-  region attribution is ambiguous, the field is marked needs_review rather than
-  pass, so a human makes the final call.
+  label evidence cannot be confidently compared to the entered application data,
+  the field fails rather than passing.
+- **Government warning:** unreadable, partial, approximate, or inferred warning
+  text fails because the warning must be readable and exact.
 
 ### Sources
 
@@ -93,6 +124,7 @@ is governed by 27 CFR Part 16.
 - Malt beverage mandatory label information - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-mandatory-label-information>
 - Malt beverage alcohol content optional/mandatory rule - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-alcohol-content>
 - Malt beverage net contents requirement - TTB: <https://www.ttb.gov/regulated-commodities/beverage-alcohol/beer/labeling/malt-beverage-net-contents>
+- Alcoholic beverage health warning statement regulation - eCFR 27 CFR Part 16: <https://www.ecfr.gov/current/title-27/chapter-I/subchapter-A/part-16>
 
 ## Security Assumptions
 

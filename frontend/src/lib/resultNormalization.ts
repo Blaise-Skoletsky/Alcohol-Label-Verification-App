@@ -30,6 +30,28 @@ type BatchUpdate = Pick<
   | "isPolling"
 >;
 
+export type ResultCore = {
+  status: UiStatus;
+  fields: FieldSummary[];
+  summary: string;
+  updatedAtLabel: string;
+  errorMessage: string;
+};
+
+// Parse a verification payload into the status/fields/summary a LabelRow needs,
+// independent of the file-upload BatchItem shape.
+export function normalizeResultCore(payload: unknown): ResultCore {
+  const status = normalizeStatusFromUnknown(payload);
+  const fields = extractFieldSummaries(payload);
+  return {
+    status,
+    fields,
+    summary: buildSummary(status, fields, payload),
+    updatedAtLabel: extractUpdatedAt(payload),
+    errorMessage: getFriendlyError(payload),
+  };
+}
+
 export function normalizeSingleResult(payload: unknown, localItem: BatchItem): BatchItem {
   const status = normalizeStatusFromUnknown(payload);
   const fields = extractFieldSummaries(payload);
@@ -216,20 +238,13 @@ function buildSummary(status: UiStatus, fields: FieldSummary[], payload: unknown
   }
 
   const failedFields = fields.filter((field) => field.status === "fail").map((field) => field.label);
-  const reviewFields = fields
-    .filter((field) => field.status === "needs-review")
-    .map((field) => field.label);
-
   if (status === "pass") {
-    return "All reviewed fields passed.";
+    return "All checked fields passed.";
   }
   if (failedFields.length > 0) {
     return `Check ${failedFields.join(", ")}.`;
   }
-  if (reviewFields.length > 0) {
-    return `Manual review needed for ${reviewFields.join(", ")}.`;
-  }
-  return "Review complete.";
+  return "Check complete.";
 }
 
 function getFriendlyError(source: unknown) {

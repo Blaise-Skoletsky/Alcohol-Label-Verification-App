@@ -1,5 +1,6 @@
 import logging
 
+from app.models.application import ApplicationValues
 from app.models.errors import VerificationError
 from app.models.uploads import ValidatedUpload
 from app.models.verification import VerificationResult, VerificationStatus
@@ -18,10 +19,19 @@ class VerificationService:
         self._provider = provider
         self._result_guard = result_guard or ResultGuardService()
 
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> VerificationResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: ApplicationValues | None = None,
+    ) -> VerificationResult:
         try:
             provider_result = self._result_guard.enforce(
-                await self._provider.verify(upload=upload, item_id=item_id)
+                await self._provider.verify(
+                    upload=upload,
+                    item_id=item_id,
+                    application_values=application_values,
+                )
             )
         except ProviderError as exc:
             logger.warning(

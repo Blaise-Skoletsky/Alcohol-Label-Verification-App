@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
+from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.models.verification import ModelMetadata, VerificationFields, VerificationStatus
 
@@ -21,5 +22,10 @@ class ProviderResult:
 
 
 class VerificationProvider(Protocol):
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> ProviderResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: ApplicationValues | None = None,
+    ) -> ProviderResult:
         ...

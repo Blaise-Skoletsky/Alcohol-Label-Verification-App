@@ -74,3 +74,9 @@
   }
 }
 
+@keyframes lv-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

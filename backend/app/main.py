@@ -6,7 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.controllers import batch_router, config_router, health_router, verification_router
+from app.controllers import (
+    batch_router,
+    config_router,
+    health_router,
+    sheet_router,
+    verification_router,
+)
 from app.core.settings import get_settings
 
 
@@ -26,6 +32,7 @@ def create_app() -> FastAPI:
     app.include_router(config_router)
     app.include_router(verification_router)
     app.include_router(batch_router)
+    app.include_router(sheet_router)
 
     mount_static_frontend(app)
     return app

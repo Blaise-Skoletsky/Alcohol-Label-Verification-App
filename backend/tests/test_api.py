@@ -1,3 +1,4 @@
+import io
 import json
 import time
 
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.core.dependencies import get_batch_service, get_verification_service
 from app.core.settings import Settings
 from app.main import app
+from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.models.verification import (
     ModelMetadata,
@@ -98,7 +100,13 @@ def make_fields(
 
 
 class TestVerificationService:
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> VerificationResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: "ApplicationValues | None" = None,
+    ) -> VerificationResult:
+        self.last_application_values = application_values
         evidence = [VerificationEvidence(summary="Test verification service used.")]
         return VerificationResult(
             item_id=item_id,
@@ -137,7 +145,12 @@ class TestVerificationService:
 
 
 class ErrorVerificationService:
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> VerificationResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: "ApplicationValues | None" = None,
+    ) -> VerificationResult:
         return VerificationResult(
             item_id=item_id,
             filename=upload.filename,
@@ -275,7 +288,7 @@ def test_batch_submission_and_progress_shape() -> None:
     assert last_body["status"] == "completed"
     assert last_body["total_items"] == 2
     assert set(last_body["counts"]).issuperset(
-        {"queued", "processing", "pass", "fail", "needs_review", "processing_error"}
+        {"queued", "processing", "pass", "fail", "processing_error"}
     )
     assert all("status" in item for item in last_body["items"])
 
@@ -331,7 +344,7 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
 
     system_text = payload["messages"][0]["content"]
     user_text = payload["messages"][1]["content"][0]["text"]
-    assert system_text.startswith("NON-NEGOTIABLE VISUAL GATE")
+    assert system_text.startswith("NON-NEGOTIABLE GOVERNMENT WARNING GATE")
     assert "alcohol label verification assistant" in system_text
     assert "artifact_legibility" in system_text
     assert "brand_name" in system_text
@@ -341,16 +354,206 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "name_address" in system_text
     assert "country_of_origin" in system_text
     assert "government_warning" in system_text
-    assert "Never return needs_review for government_warning" in system_text
+    assert "Allowed statuses: pass or fail only" in system_text
     assert '"government_warning":        {"status":"pass|fail",' in system_text
     assert '"application_value":"Required federal government warning"' in system_text
-    assert "Government warning passes only when the label artwork visibly prints the warning heading" in system_text
+    assert "APPLICATION_VALUES_JSON" in system_text
+    assert "The uploaded image is label artwork only" in system_text
+    assert "Do not extract application values from the image" in system_text
+    assert "prefix 'GOVERNMENT WARNING:' is all caps and visibly bold" in system_text
     assert "Never invent or fill in government_warning.label_value from regulatory knowledge" in system_text
-    assert user_text == (
-        "Review the attached combined application-and-label artifact using the system rules. "
-        "Use only text visible in the image; do not infer or fill missing label text from the rules."
-    )
+    assert "Review the attached label artwork image using the system rules." in user_text
+    assert "APPLICATION_VALUES_JSON" in user_text
+    assert '"brand_name": "{{brand_name}}"' in user_text
     assert "government_warning" not in user_text
+
+
+def test_verification_prompt_accepts_application_values() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Stone's Throw",
+            "class_type_designation": "Wine",
+            "alcohol_content": "13.5% ABV",
+            "net_contents": "750 mL",
+            "name_address": "Example Producer, Napa, CA",
+            "country_of_origin": "Domestic product",
+        }
+    )
+
+    assert "\"brand_name\": \"Stone's Throw\"" in prompt.user_instruction
+    assert '"class_type_designation": "Wine"' in prompt.user_instruction
+    assert '"alcohol_content": "13.5% ABV"' in prompt.user_instruction
+    assert "The uploaded image is label artwork only" in prompt.system_instruction
+    assert "Do not extract application values from the image" in prompt.system_instruction
+
+
+def test_verify_forwards_application_values_to_service() -> None:
+    app.dependency_overrides.clear()
+    service = TestVerificationService()
+    app.dependency_overrides[get_verification_service] = lambda: service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/verify",
+        files={"file": ("sample.png", PNG_BYTES, "image/png")},
+        data={
+            "brand_name": "Coyam",
+            "beverage_class": "wine",
+            "class_type_designation": "Red Wine",
+            "alcohol_content": "14.5%",
+            "net_contents": "750 mL",
+            "name_address": "Banfi Products Corp",
+            "country_of_origin": "Chile",
+        },
+    )
+
+    assert response.status_code == 200
+    values = service.last_application_values
+    assert isinstance(values, ApplicationValues)
+    assert values.brand_name == "Coyam"
+    assert values.beverage_class == "wine"
+    assert values.net_contents == "750 mL"
+    assert values.country_of_origin == "Chile"
+    app.dependency_overrides.clear()
+
+
+def test_provider_payload_includes_application_values() -> None:
+    provider = OpenRouterVerificationProvider(
+        Settings(openrouter_api_key="test-key"),
+        prompt_service=VerificationPromptService(),
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    payload = provider._build_payload(
+        model="google/gemini-3.5-flash",
+        upload=upload,
+        application_values=ApplicationValues(brand_name="Coyam", net_contents="750 mL"),
+    )
+
+    user_text = payload["messages"][1]["content"][0]["text"]
+    assert '"brand_name": "Coyam"' in user_text
+    assert '"net_contents": "750 mL"' in user_text
+
+
+def test_batch_accepts_aligned_rows() -> None:
+    client = make_test_client()
+
+    response = client.post(
+        "/api/batches",
+        files=[
+            ("files", ("coyam.png", PNG_BYTES, "image/png")),
+            ("files", ("casamigos.png", PNG_BYTES, "image/png")),
+        ],
+        data={
+            "rows": json.dumps(
+                [
+                    {"filename": "coyam.png", "brand_name": "Coyam", "beverage_class": "wine"},
+                    {"filename": "casamigos.png", "brand_name": "Casamigos", "beverage_class": "spirits"},
+                ]
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 2
+
+
+def test_batch_rejects_misaligned_rows() -> None:
+    client = make_test_client()
+
+    response = client.post(
+        "/api/batches",
+        files=[("files", ("coyam.png", PNG_BYTES, "image/png"))],
+        data={"rows": json.dumps([{"brand_name": "Coyam"}, {"brand_name": "Extra"}])},
+    )
+
+    assert response.status_code == 400
+
+
+def test_sheet_parse_csv_normalizes_columns() -> None:
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    csv_bytes = (
+        "image,brand_name,class_type,beverage_class,alcohol_content,net_contents,name_address,country_of_origin\n"
+        "coyam.png,Coyam,Red Wine,wine,14.5%,750 mL,Banfi Products Corp,Chile\n"
+    ).encode("utf-8")
+
+    response = client.post(
+        "/api/sheets/parse",
+        files={"file": ("sample_batch.csv", csv_bytes, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["row_count"] == 1
+    assert "brand_name" in body["columns"]
+    row = body["rows"][0]
+    assert row["image"] == "coyam.png"
+    assert row["brand_name"] == "Coyam"
+    assert row["class_type"] == "Red Wine"
+    assert row["beverage_class"] == "wine"
+
+
+def test_sheet_parse_xlsx() -> None:
+    from openpyxl import Workbook
+
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(["image", "brand", "abv", "net"])
+    worksheet.append(["monkey_47.png", "Monkey 47", "47%", "500 mL"])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+
+    response = client.post(
+        "/api/sheets/parse",
+        files={
+            "file": (
+                "sample_batch.xlsx",
+                buffer.getvalue(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["row_count"] == 1
+    row = body["rows"][0]
+    assert row["image"] == "monkey_47.png"
+    assert row["brand_name"] == "Monkey 47"
+    assert row["alcohol_content"] == "47%"
+    assert row["net_contents"] == "500 mL"
+
+
+def test_sheet_parse_rejects_unknown_extension() -> None:
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sheets/parse",
+        files={"file": ("data.txt", b"image,brand_name\n", "text/plain")},
+    )
+
+    assert response.status_code == 400
+
+
+def test_sheet_template_download() -> None:
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+
+    response = client.get("/api/sheets/template.csv")
+
+    assert response.status_code == 200
+    assert "image" in response.text
+    assert "brand_name" in response.text
+    assert "country_of_origin" in response.text
 
 
 def test_openrouter_parser_accepts_string_evidence_items() -> None:
@@ -449,7 +652,7 @@ def test_openrouter_parser_accepts_string_evidence_items() -> None:
     assert result.fields.brand_name.evidence[0].summary == "Brand appears on label."
 
 
-def test_result_guard_does_not_allow_non_abv_text_to_pass_alcohol_content() -> None:
+def test_result_guard_fails_non_abv_text_for_alcohol_content() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(
             status=VerificationStatus.pass_status,
@@ -469,20 +672,20 @@ def test_result_guard_does_not_allow_non_abv_text_to_pass_alcohol_content() -> N
         )
     )
 
-    assert result.status == VerificationStatus.needs_review
-    assert result.summary == "Manual review needed: alcohol content."
-    assert result.fields.alcohol_content.status == "needs_review"
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: alcohol content."
+    assert result.fields.alcohol_content.status == "fail"
     assert "alcohol-content" in result.fields.alcohol_content.reason
 
 
 def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(
-            status=VerificationStatus.needs_review,
-            summary="Model requested review.",
+            status=VerificationStatus.fail,
+            summary="Model failed the field.",
             fields=make_fields(
                 alcohol_content=make_field(
-                    status="needs_review",
+                    status="fail",
                     application_value="Not required for table wine designation",
                     label_value="Not required for table wine designation",
                     reason="Alcohol content could not be confidently extracted as an alcohol-content value.",
