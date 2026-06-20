@@ -37,6 +37,20 @@ const metadata = {
       country_of_origin: "Domestic",
     },
   },
+  "pass/3_steves_winery_2017-05-25_glare.png": {
+    brand: "3 Steves Reserve",
+    desc: "Expected pass: intentionally strong glare, but the required label information remains readable.",
+    applicationValues: {
+      brand_name: "3 Steves Reserve",
+      beverage_class: "wine",
+      class_type_designation: "Cabernet Sauvignon",
+      alcohol_content: "Alcohol: 14.6% by volume",
+      net_contents: "750 ml",
+      name_address:
+        "Grown, Produced and Bottled by 3 Steves Winery, Livermore Valley, California",
+      country_of_origin: "Domestic",
+    },
+  },
   "pass/3_steves_winery_2018-12-18.png": {
     brand: "3 Steves Winery",
     desc: "Expected pass: application values match the 2018 Fume Blanc label.",
@@ -63,9 +77,35 @@ const metadata = {
       country_of_origin: "Spain",
     },
   },
+  "pass/altos_2017-10-25_rotated.png": {
+    brand: "Altos de Inurrieta",
+    desc: "Expected pass: intentionally 90-degree rotated photo, but all required label information remains visible.",
+    applicationValues: {
+      brand_name: "Altos de Inurrieta",
+      beverage_class: "wine",
+      class_type_designation: "Red Wine",
+      alcohol_content: "Alc. 14.5% by Vol.",
+      net_contents: "750 ml",
+      name_address: "Imported by GV Berkeley LLC, Berkeley, California",
+      country_of_origin: "Spain",
+    },
+  },
   "pass/apple_brandy_2016-11-02.png": {
     brand: "Dampfwerk Apple Brandy",
     desc: "Expected pass: application values match the Dampfwerk Apple Brandy label.",
+    applicationValues: {
+      brand_name: "Dampfwerk Apple Brandy",
+      beverage_class: "spirits",
+      class_type_designation: "Apple Brandy",
+      alcohol_content: "43% Alc. by Vol.",
+      net_contents: "375 ml",
+      name_address: "Distilled and bottled by Dampfwerk Distilling, St Louis Park, MN 55416",
+      country_of_origin: "Domestic",
+    },
+  },
+  "pass/apple_brandy_2016-11-02_rotated.png": {
+    brand: "Dampfwerk Apple Brandy",
+    desc: "Expected pass: intentionally upside-down photo, but all required label information remains visible.",
     applicationValues: {
       brand_name: "Dampfwerk Apple Brandy",
       beverage_class: "spirits",
@@ -149,6 +189,20 @@ const metadata = {
   "pass/blue_ridge_winery_llc_2018-08-24.png": {
     brand: "Blue Ridge",
     desc: "Expected pass: application values match the Blue Ridge Inspiration label.",
+    applicationValues: {
+      brand_name: "Blue Ridge",
+      beverage_class: "wine",
+      class_type_designation: "White grape wine with artificial flavor",
+      alcohol_content: "Alc. 11% by vol.",
+      net_contents: "750 ml",
+      name_address:
+        "Vinted and bottled by Blue Ridge Winery, LLC, 239 Blue Ridge Road, Saylorsburg, PA 18353",
+      country_of_origin: "Domestic",
+    },
+  },
+  "pass/blue_ridge_winery_llc_2018-08-24_glare.png": {
+    brand: "Blue Ridge",
+    desc: "Expected pass: intentionally strong glare, but the required label information remains readable.",
     applicationValues: {
       brand_name: "Blue Ridge",
       beverage_class: "wine",
