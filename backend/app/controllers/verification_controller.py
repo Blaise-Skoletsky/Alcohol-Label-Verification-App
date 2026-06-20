@@ -27,6 +27,17 @@ def _clean(value: str | None) -> str | None:
     return stripped or None
 
 
+def _parse_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
 @router.post("/api/verify", response_model=VerificationResult)
 async def api_verify(
     file: UploadFile = File(...),
@@ -37,6 +48,8 @@ async def api_verify(
     net_contents: str | None = Form(None),
     name_address: str | None = Form(None),
     country_of_origin: str | None = Form(None),
+    malt_added_nonbeverage_alcohol: str | None = Form(None),
+    malt_color_additive_applicable: str | None = Form(None),
     settings: Settings = Depends(get_settings),
     upload_service: UploadService = Depends(get_upload_service),
     verification_service: VerificationService = Depends(get_verification_service),
@@ -55,6 +68,8 @@ async def api_verify(
         net_contents=_clean(net_contents),
         name_address=_clean(name_address),
         country_of_origin=_clean(country_of_origin),
+        malt_added_nonbeverage_alcohol=_parse_bool(malt_added_nonbeverage_alcohol),
+        malt_color_additive_applicable=_parse_bool(malt_color_additive_applicable),
     )
 
     result = await verification_service.verify(

@@ -27,6 +27,19 @@ def _row_to_application_values(row: object) -> ApplicationValues:
         text = str(value).strip()
         return text or None
 
+    def bool_field(name: str) -> bool | None:
+        value = row.get(name)
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+        return None
+
     beverage_class = (field("beverage_class") or "").lower()
     return ApplicationValues(
         brand_name=field("brand_name"),
@@ -36,6 +49,8 @@ def _row_to_application_values(row: object) -> ApplicationValues:
         net_contents=field("net_contents"),
         name_address=field("name_address"),
         country_of_origin=field("country_of_origin"),
+        malt_added_nonbeverage_alcohol=bool_field("malt_added_nonbeverage_alcohol"),
+        malt_color_additive_applicable=bool_field("malt_color_additive_applicable"),
     )
 
 

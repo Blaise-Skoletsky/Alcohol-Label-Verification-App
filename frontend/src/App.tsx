@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BatchUploadModal } from "./components/BatchUploadModal";
+import { BatchGridModal } from "./components/BatchGridModal";
 import { DetailModal } from "./components/DetailModal";
-import { LabelGridView } from "./components/LabelGridView";
 import { LabelListView } from "./components/LabelListView";
 import { SamplePickerModal } from "./components/SamplePickerModal";
 import { Sidebar } from "./components/Sidebar";
@@ -10,11 +9,13 @@ import { makeRow, useLabelRows } from "./hooks/useLabelRows";
 import type { SampleEntry } from "./generated/sampleLabels";
 import type { LabelRow } from "./types/verification";
 
-type View = "list" | "grid";
-type Filter = "all" | "pass" | "fail" | "draft";
+type Filter = "all" | "pass" | "fail" | "edited" | "draft";
 
 function matchesFilter(row: LabelRow, filter: Filter): boolean {
+  const edited = row.edited && Boolean(row.fields);
   if (filter === "all") return true;
+  if (filter === "edited") return edited;
+  if (edited) return false;
   if (filter === "pass") return row.status === "pass";
   if (filter === "fail") return row.status === "fail" || row.status === "processing-error";
   return row.status === "draft" || row.status === "processing" || row.status === "queued";
@@ -32,6 +33,8 @@ function entryToRow(entry: SampleEntry): LabelRow {
     net: values.net_contents,
     nameAddr: values.name_address,
     country: values.country_of_origin,
+    maltAddedNonbeverageAlcohol: values.malt_added_nonbeverage_alcohol ?? false,
+    maltColorAdditiveApplicable: values.malt_color_additive_applicable ?? false,
     fileName,
     imageUrl: url,
     sampleUrl: url,
@@ -52,15 +55,21 @@ export function App() {
     if (toastTimer.current !== null) clearTimeout(toastTimer.current);
   }, []);
 
-  const { rows, statusCounts, editRow, attachImage, addBlankRow, replaceRows, verifyRows } =
-    useLabelRows(notify);
+  const {
+    rows,
+    statusCounts,
+    editRow,
+    attachImage,
+    addBlankRow,
+    replaceAndVerify,
+    verifyRows,
+  } = useLabelRows(notify);
 
-  const [view, setView] = useState<View>("list");
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
+  const [batchPhotos, setBatchPhotos] = useState<File[] | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
   useEffect(() => {
@@ -114,21 +123,22 @@ export function App() {
     setSelected(new Set());
   }
 
+  function changeFilter(nextFilter: Filter) {
+    if (nextFilter !== filter) {
+      clearSelection();
+    }
+    setFilter(nextFilter);
+  }
+
   // ---- primary action (contextual) ----
   const draftIds = rows.filter((row) => row.status === "draft").map((row) => row.localId);
-  const failIds = rows
-    .filter((row) => row.status === "fail" || row.status === "processing-error")
-    .map((row) => row.localId);
   const selectedIds = [...selected];
 
   let primaryLabel = "Verify";
   let primaryAction: (() => void) | null = null;
 
   if (selectedIds.length > 0) {
-    const anyDraft = rows.some(
-      (row) => selected.has(row.localId) && (row.status === "draft" || row.status === "processing-error"),
-    );
-    primaryLabel = `${anyDraft ? "Verify" : "Re-run"} ${selectedIds.length} selected`;
+    primaryLabel = `Verify ${selectedIds.length} selected`;
     primaryAction = () => {
       verifyRows(selectedIds);
       clearSelection();
@@ -136,9 +146,6 @@ export function App() {
   } else if (draftIds.length > 0) {
     primaryLabel = `Verify ${draftIds.length} new`;
     primaryAction = () => verifyRows(draftIds);
-  } else if (failIds.length > 0) {
-    primaryLabel = `Re-run failed (${failIds.length})`;
-    primaryAction = () => verifyRows(failIds);
   } else if (rows.length > 0) {
     primaryLabel = "Re-verify all";
     primaryAction = () => verifyRows(rows.map((row) => row.localId));
@@ -162,29 +169,38 @@ export function App() {
   }
 
   function loadSamples(entries: SampleEntry[]) {
-    replaceRows(entries.map(entryToRow));
+    const sampleRows = entries.map(entryToRow);
+    replaceAndVerify(sampleRows, sampleRows.map((row) => row.localId));
     setSelected(new Set());
     setDetailId(null);
     setFilter("all");
     notify(
-      `Loaded ${entries.length} sample label${entries.length === 1 ? "" : "s"} as drafts — edit any field, then verify.`,
+      `Verifying ${entries.length} sample label${entries.length === 1 ? "" : "s"} now.`,
     );
   }
 
-  function importRows(importedRows: LabelRow[], summary: string) {
-    replaceRows(importedRows);
+  // Batch upload completion: every row lands in the workspace, but only the
+  // complete/matched subset (verifyIds) starts verifying immediately.
+  function completeBatch(allRows: LabelRow[], verifyIds: string[], summary: string) {
+    replaceAndVerify(allRows, verifyIds);
     setSelected(new Set());
     setDetailId(null);
     setFilter("all");
-    setImportOpen(false);
+    setBatchPhotos(null);
     notify(summary);
+  }
+
+  function startBatchUpload(files: File[]) {
+    if (files.length === 0) return;
+    setBatchPhotos(files);
   }
 
   const filters: { key: Filter; label: string; count: number }[] = [
     { key: "all", label: "All", count: statusCounts.total },
     { key: "pass", label: "Pass", count: statusCounts.pass },
     { key: "fail", label: "Fail", count: statusCounts.fail },
-    { key: "draft", label: "Not run", count: statusCounts.notRun },
+    { key: "edited", label: "Edited", count: statusCounts.edited },
+    { key: "draft", label: "Not verified", count: statusCounts.notRun },
   ];
 
   return (
@@ -193,23 +209,12 @@ export function App() {
         <Sidebar
           counts={statusCounts}
           onAddLabel={openAddLabel}
-          onBatchUpload={() => setImportOpen(true)}
+          onBatchUpload={startBatchUpload}
           onUseSamples={() => setPickerOpen(true)}
         />
 
         <main className="main">
           <div className="main-top">
-            <div className="main-top-row">
-              <button
-                type="button"
-                className="primary-action"
-                disabled={!primaryAction}
-                onClick={() => primaryAction?.()}
-              >
-                {primaryLabel}
-              </button>
-            </div>
-
             <div className="toolbar">
               <div className="filter-pills">
                 {filters.map((pill) => (
@@ -217,7 +222,7 @@ export function App() {
                     key={pill.key}
                     type="button"
                     className={`filter-pill${filter === pill.key ? " active" : ""}`}
-                    onClick={() => setFilter(pill.key)}
+                    onClick={() => changeFilter(pill.key)}
                   >
                     {pill.label}
                     <span className="filter-pill-count">{pill.count}</span>
@@ -235,44 +240,27 @@ export function App() {
                     <span className="selection-divider" />
                   </span>
                 ) : null}
-                <div className="view-toggle">
-                  <button
-                    type="button"
-                    className={`view-seg${view === "list" ? " active" : ""}`}
-                    onClick={() => setView("list")}
-                  >
-                    List
-                  </button>
-                  <button
-                    type="button"
-                    className={`view-seg${view === "grid" ? " active" : ""}`}
-                    onClick={() => setView("grid")}
-                  >
-                    Spreadsheet
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  className="primary-action"
+                  disabled={!primaryAction}
+                  onClick={() => primaryAction?.()}
+                >
+                  {primaryLabel}
+                </button>
               </div>
             </div>
           </div>
 
           <div className="table-region">
-            {view === "list" ? (
-              <LabelListView
-                rows={visibleRows}
-                selected={selected}
-                allSelected={allSelected}
-                onToggleAll={toggleSelectAll}
-                onToggle={toggleSelect}
-                onOpen={setDetailId}
-              />
-            ) : (
-              <LabelGridView
-                rows={visibleRows}
-                onEdit={editRow}
-                onRerun={(id) => verifyRows([id])}
-                onAddRow={() => addBlankRow()}
-              />
-            )}
+            <LabelListView
+              rows={visibleRows}
+              selected={selected}
+              allSelected={allSelected}
+              onToggleAll={toggleSelectAll}
+              onToggle={toggleSelect}
+              onOpen={setDetailId}
+            />
           </div>
         </main>
       </div>
@@ -297,10 +285,12 @@ export function App() {
         onLoad={loadSamples}
       />
 
-      {importOpen ? (
-        <BatchUploadModal
-          onClose={() => setImportOpen(false)}
-          onImport={importRows}
+      {batchPhotos ? (
+        <BatchGridModal
+          initialPhotos={batchPhotos}
+          onStartOver={() => setBatchPhotos(null)}
+          onClose={() => setBatchPhotos(null)}
+          onComplete={completeBatch}
           onError={notify}
         />
       ) : null}

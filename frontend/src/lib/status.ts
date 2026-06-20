@@ -1,7 +1,7 @@
 import type { UiStatus } from "../types/verification";
 
 export const STATUS_LABELS: Record<UiStatus, string> = {
-  draft: "Not run",
+  draft: "Not verified",
   queued: "Queued",
   processing: "Verifying",
   pass: "Pass",

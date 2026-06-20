@@ -65,7 +65,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ALV_MAX_UPLOAD_MB", "MAX_UPLOAD_MB"),
     )
     max_batch_count: int = Field(
-        default=400,
+        default=350,
         validation_alias=AliasChoices("ALV_MAX_BATCH_COUNT", "MAX_BATCH_COUNT", "MAX_BATCH_LABELS"),
     )
     batch_concurrency: int = Field(

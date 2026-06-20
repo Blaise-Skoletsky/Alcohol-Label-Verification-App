@@ -102,6 +102,10 @@ button {
   color: #9a6400;
   background: #f7efdf;
 }
+.status-pill.tone-edited {
+  color: #9a7012;
+  background: #faf3e2;
+}
 .status-pill.tone-fail,
 .status-pill.tone-error {
   color: #c5362b;
@@ -127,6 +131,12 @@ button {
 .tone-review.stat-dot,
 .tone-review.verdict-dot {
   background: #c9870f;
+}
+.tone-edited.status-pill-dot,
+.tone-edited.mini-check-dot,
+.tone-edited.stat-dot,
+.tone-edited.verdict-dot {
+  background: #d2a32a;
 }
 .tone-fail.status-pill-dot,
 .tone-fail.mini-check-dot,

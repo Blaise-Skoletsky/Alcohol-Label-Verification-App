@@ -126,6 +126,13 @@ The UI should be minimal, light, and work-focused. Use a plain white interface w
 - The expected demo load is one to two concurrent users, with the primary stress case being one user submitting 100-400 label images with corresponding application data while processing proceeds five at a time.
 - If durable batch processing is intentionally added later, Azure Blob Storage, Azure Queue Storage, and Azure Table Storage, Cosmos DB, or Postgres are the likely Azure-native options.
 
+# Production Large Batch Demo Dataset
+
+The full 300-350 label demo dataset should not be committed to the Git
+repository. In production, the large demo batch can be enabled by environment
+configuration and loaded from Azure Blob Storage; local development should not
+show the large demo batch button.
+
 # Model Strategy
 
 Use OpenRouter because it gives one API contract for multiple vision-capable models and lets the service fail over when one provider is slow or unavailable. Model IDs must be configuration, not hardcoded business logic.

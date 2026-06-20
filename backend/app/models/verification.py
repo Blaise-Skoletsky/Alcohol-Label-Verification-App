@@ -35,6 +35,7 @@ class VerificationFields(BaseModel):
     net_contents: VerificationFieldResult
     name_address: VerificationFieldResult
     country_of_origin: VerificationFieldResult
+    color_additive_disclosure: VerificationFieldResult
     government_warning: VerificationFieldResult
 
 

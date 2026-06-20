@@ -9,6 +9,8 @@ export interface SampleApplicationValues {
   net_contents: string;
   name_address: string;
   country_of_origin: string;
+  malt_added_nonbeverage_alcohol?: boolean;
+  malt_color_additive_applicable?: boolean;
 }
 
 export interface SampleEntry {
@@ -77,7 +79,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 14.5% by Vol.",
       "net_contents": "750 ml",
       "name_address": "Imported by GV Berkeley LLC, Berkeley, California",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Spain"
     }
   },
   {
@@ -107,7 +109,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 14.5% by vol.",
       "net_contents": "Net cont. 750 ml",
       "name_address": "Bottled by Societa Agricola Cipriana S.R.L., Spirano - Italia; Imported by Buta - Distributors Inc., Boca Raton, FL",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Italy"
     }
   },
   {
@@ -122,7 +124,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "35% Alc. by Vol.",
       "net_contents": "50 ml",
       "name_address": "Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY; produced and bottled in Germany",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Germany"
     }
   },
   {
@@ -137,7 +139,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "35% alc/vol",
       "net_contents": "50 ml",
       "name_address": "Imported by Sidney Frank Importing Co. Inc., New Rochelle, N.Y.; produced & bottled in Germany",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Germany"
     }
   },
   {
@@ -152,7 +154,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 13.5% by vol.",
       "net_contents": "750 ml content",
       "name_address": "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Italy"
     }
   },
   {
@@ -167,7 +169,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 12.5% by vol.",
       "net_contents": "750 ml content",
       "name_address": "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Italy"
     }
   },
   {
@@ -201,21 +203,6 @@ export const SAMPLES: SampleEntry[] = [
     }
   },
   {
-    "id": "pass-brook-and-bull-2018-01-10",
-    "brand": "Brook & Bull",
-    "file": "pass/brook_and_bull_2018-01-10.png",
-    "desc": "Expected pass: application values match The Few and Far Between red wine label.",
-    "applicationValues": {
-      "brand_name": "Brook & Bull",
-      "beverage_class": "wine",
-      "class_type_designation": "52% Cabernet Sauvignon 48% Malbec",
-      "alcohol_content": "Alc. 14.5% by vol.",
-      "net_contents": "750 ml",
-      "name_address": "Bottled by Brook & Bull, Walla Walla, WA",
-      "country_of_origin": "Domestic"
-    }
-  },
-  {
     "id": "fail-blue-ridge-winery-llc-2018-08-29-attorney-general-warning",
     "brand": "Blue Ridge Princess",
     "file": "fail/blue_ridge_winery_llc_2018-08-29_attorney_general_warning.png",
@@ -231,17 +218,17 @@ export const SAMPLES: SampleEntry[] = [
     }
   },
   {
-    "id": "fail-boones-mill-2017-11-24-titlecase-warning",
-    "brand": "Boones Mill",
-    "file": "fail/boones_mill_2017-11-24_titlecase_warning.png",
-    "desc": "Expected fail: the government warning heading was changed to title case.",
+    "id": "fail-brook-and-bull-2018-01-10",
+    "brand": "Brook & Bull",
+    "file": "fail/brook_and_bull_2018-01-10.png",
+    "desc": "Expected fail: net contents are not present on the label.",
     "applicationValues": {
-      "brand_name": "Boones Mill",
-      "beverage_class": "spirits",
-      "class_type_designation": "Apple Brandy",
-      "alcohol_content": "50% Alc/Vol",
-      "net_contents": "375 ml",
-      "name_address": "Bottled by Franklin County Distilleries, Franklin County, Virginia 24176",
+      "brand_name": "Brook & Bull",
+      "beverage_class": "wine",
+      "class_type_designation": "52% Cabernet Sauvignon 48% Malbec",
+      "alcohol_content": "Alc. 14.5% by vol.",
+      "net_contents": "750 ml",
+      "name_address": "Bottled by Brook & Bull, Walla Walla, WA",
       "country_of_origin": "Domestic"
     }
   },
@@ -257,7 +244,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "14.5% by vol.",
       "net_contents": "750 ml",
       "name_address": "Bottled by Az. Ag. Ca Piadera S.S., Tarzo (TV), Italy",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Italy"
     }
   },
   {
@@ -272,7 +259,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 14.5% by vol.",
       "net_contents": "Net contents 750 ml",
       "name_address": "Product and bottled by Cantine Mothia S.r.l., Marsala (Italia); Imported by Buta Distributors Inc., Boca Raton (FL)",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Italy"
     }
   },
   {
@@ -302,7 +289,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 16.5% by vol.",
       "net_contents": "Net cont. 750 ml",
       "name_address": "Imported by Justabout Winery LLC, Venetia, PA, USA; Estate grown and bottled by Chaglasian Winery & Vineyards, San Rafael, Mendoza",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Argentina"
     }
   },
   {
@@ -324,7 +311,7 @@ export const SAMPLES: SampleEntry[] = [
     "id": "fail-cold-spring-brewery-2019-12-20",
     "brand": "Cold Spring Brewery",
     "file": "fail/cold_spring_brewery_2019-12-20.png",
-    "desc": "Expected fail: domestic malt label is submitted as Imported while alcohol content is federally optional.",
+    "desc": "Expected fail: domestic malt label is submitted as Canada while alcohol content is federally optional.",
     "applicationValues": {
       "brand_name": "Cold Spring Brewery",
       "beverage_class": "malt",
@@ -332,7 +319,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "",
       "net_contents": "750 ml",
       "name_address": "Brewed by Cold Spring Brewery, Cold Spring, MN",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Canada"
     }
   },
   {
@@ -422,14 +409,14 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "16.5% Alc./Vol.",
       "net_contents": "720 ml",
       "name_address": "Produced by Gekkeikan Sake Company, Ltd.; Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Japan"
     }
   },
   {
     "id": "fail-good-people-brewing-company-2016-08-12",
     "brand": "Good People Brewing Company",
     "file": "fail/good_people_brewing_company_2016-08-12.png",
-    "desc": "Expected fail: malt label uses optional blank ABV, but the application says Imported for a domestic label.",
+    "desc": "Expected fail: malt label uses optional blank ABV, but the application says Canada for a domestic label.",
     "applicationValues": {
       "brand_name": "Good People Brewing Company",
       "beverage_class": "malt",
@@ -437,7 +424,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "",
       "net_contents": "12 fl oz",
       "name_address": "Bottled by Good People Brewing Company, Birmingham, AL",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Canada"
     }
   },
   {
@@ -452,7 +439,7 @@ export const SAMPLES: SampleEntry[] = [
       "alcohol_content": "Alc. 40% by vol.",
       "net_contents": "1 L",
       "name_address": "Produced and bottled by SIS Industries OOD, Bulgaria; Imported by Malinka Imports LLC, Palatine, IL 60067",
-      "country_of_origin": "Imported"
+      "country_of_origin": "Bulgaria"
     }
   }
 ];

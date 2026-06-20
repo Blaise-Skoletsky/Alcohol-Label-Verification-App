@@ -20,7 +20,7 @@ class VerificationPlan:
     country_mode: str
 
 
-ApplicationValues = Mapping[str, str | None]
+ApplicationValues = Mapping[str, str | bool | None]
 
 
 class VerificationPromptService:
@@ -45,9 +45,13 @@ class VerificationPromptService:
                 "values from it. Use only visible label text for label_value and evidence."
             ),
             (
-                "Government warning is strict and label-only: pass only when the federal "
-                "warning words and punctuation are visible and the prefix 'GOVERNMENT WARNING:' "
-                "is all caps. The body may be sentence case or all caps."
+                "Government warning is strict and label-only: pass only when the label shows "
+                "the exact federal warning statement word-for-word, with no missing, changed, "
+                "reordered, or paraphrased words. The prefix 'GOVERNMENT WARNING:' must be "
+                "all caps and visibly bold. For government_warning.label_value, transcribe the "
+                "full visible warning statement when it is readable; preserve the prefix letter "
+                "case exactly as printed and never rewrite a lowercase, title-case, or mixed-case "
+                "prefix into all caps."
             ),
             self._task_intro(),
             self._overall_verdict_rules(),
@@ -60,6 +64,9 @@ class VerificationPromptService:
             self._field_net_contents(),
             self._field_name_address(),
             self._field_country_of_origin(plan.country_mode),
+            self._field_color_additive_disclosure()
+            if "color_additive_disclosure" in plan.requested_fields
+            else "",
             self._field_government_warning(),
             self._output_format(plan.requested_fields),
             self._hard_rules(),
@@ -94,6 +101,8 @@ class VerificationPromptService:
             "net_contents": "{{net_contents}}",
             "name_address": "{{name_address}}",
             "country_of_origin": "{{country_of_origin}}",
+            "malt_added_nonbeverage_alcohol": "{{malt_added_nonbeverage_alcohol}}",
+            "malt_color_additive_applicable": "{{malt_color_additive_applicable}}",
         }
         if application_values is not None:
             values.update(
@@ -196,8 +205,7 @@ and for wine above 14% ABV or at/below 7% ABV."""
 
         return """\
 FIELD 4 - alcohol_content:
-Alcohol content may be optional for this beverage class/type. Check whether the
-label makes alcohol content required before passing an omission.
+Alcohol content may be optional for this beverage class/type.
 Normalize before comparing: decimal comma = decimal point, and proof / 2 = ABV%.
 PASS: Both values are present and normalized alcohol values match; or alcohol
 content is omitted and allowed for a 7-14% table/light wine designation; or a
@@ -241,44 +249,68 @@ city/state/country, or unclear importer/domestic attribution."""
         if mode == "domestic":
             return """\
 FIELD 7 - country_of_origin:
-Application says Domestic. Pass if the label does not show an imported origin
-statement. Fail if the label says Product of, Imported from, Made in a foreign
-country, or otherwise indicates imported origin. A label with no import origin
-statement can pass for a Domestic application."""
+Application says Domestic. PASS if the label does not show an imported origin
+statement. A label with no country-of-origin statement can pass for Domestic.
+FAIL if the label says Product of, Imported from, Made in a foreign country, or
+otherwise indicates imported origin."""
 
-        if mode == "imported":
+        if mode.startswith("country:"):
+            country = mode.split(":", 1)[1]
             return """\
 FIELD 7 - country_of_origin:
-Application says Imported. Pass if the label shows any clear imported origin
-country statement, such as Product of Spain, Imported from Portugal, or Made in
-[Country]. The exact country does not need to match the application because the
-application captures only Imported/Domestic status. Fail if no import origin
-statement is visible or the label appears clearly domestic with no origin
-statement."""
+Application provides a country name for an imported product. Compare the visible
+label country/appellation/origin evidence to APPLICATION_VALUES_JSON.country_of_origin.
+PASS: The label shows the same country or a clearly matching country/appellation/origin
+statement for that country.
+FAIL: No imported origin statement is visible, the country conflicts with the
+application country, or the label appears clearly domestic with no matching
+origin evidence.
+Application country for this row: """ + country + "."
 
         return """\
 FIELD 7 - country_of_origin:
-APPLICATION_VALUES_JSON.country_of_origin must be Domestic or Imported. If it is
-blank, unknown, or another value, fail this field as missing application origin
-status. If the label indicates imported origin while the application is blank or
-unknown, fail."""
+APPLICATION_VALUES_JSON.country_of_origin must be Domestic or a country name.
+If it is blank or unknown, fail this field as missing application origin value.
+If the label indicates imported origin while the application is blank or unknown,
+fail."""
 
     # ------------------------------------------------------------------
-    # Field 8: government_warning
+    # Field 8: color_additive_disclosure
+    # ------------------------------------------------------------------
+
+    def _field_color_additive_disclosure(self) -> str:
+        return """\
+FIELD 8 - color_additive_disclosure:
+This check applies only to malt beverages when APPLICATION_VALUES_JSON.malt_color_additive_applicable is true.
+PASS: A color additive disclosure is visible and readable on the label.
+FAIL: The disclosure is absent, unreadable, obscured, or cannot be confidently
+identified. Do not evaluate color-additive requirements outside this yes/no
+applicability flag."""
+
+    # ------------------------------------------------------------------
+    # Field 9: government_warning
     # ------------------------------------------------------------------
 
     def _field_government_warning(self) -> str:
         return """\
-FIELD 8 - government_warning:
+FIELD 9 - government_warning:
 Required exact text:
 GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.
 
-PASS: Required warning words and punctuation are visible/readable, and the prefix
-'GOVERNMENT WARNING:' is all caps. The warning body may be sentence case or all
-caps; do not fail solely because the body text is all caps.
-FAIL: Warning is absent, unreadable, partial, altered, paraphrased, has a
-lowercase/title-case/mixed-case prefix, is hidden/covered, or is inferred from
-regulatory knowledge."""
+PASS: The complete warning statement is visible/readable and matches the required
+text word-for-word, including numbering, punctuation, and every required word.
+The prefix 'GOVERNMENT WARNING:' is all caps and visibly bold. The warning body
+may be sentence case or all caps; do not fail solely because the body text is all
+caps when the words and punctuation are otherwise exact.
+FAIL: Warning is absent, unreadable, partial, missing any required word, has any
+changed/reordered/paraphrased wording, has different punctuation that changes the
+required statement, has a lowercase/title-case/mixed-case prefix, lacks a visibly
+bold prefix, is hidden/covered, or is inferred from regulatory knowledge.
+For label_value, return the full visible warning statement when readable, not
+only the heading. Preserve the visible heading case exactly as printed. If the
+image shows 'government warning:', 'Government Warning:', or any other non-exact
+case, return the full visible statement with that non-exact heading and fail the
+field."""
 
     # ------------------------------------------------------------------
     # Output format
@@ -325,19 +357,31 @@ HARD RULES:
         ]
         deterministic_fields: dict[str, dict] = {}
         alcohol_mode = self._alcohol_mode(application_values)
-        if alcohol_mode == "not_required_table_wine":
+        if alcohol_mode.startswith("not_required"):
             deterministic_fields["alcohol_content"] = {
                 "status": "pass",
                 "application_value": "Not Required",
                 "label_value": "Not Required",
-                "reason": (
-                    "Backend applicability: Alcohol content is not required for this "
-                    "table/light wine designation."
-                ),
+                "reason": "Backend applicability: Alcohol content is not required for this row.",
                 "evidence": [],
             }
         else:
             requested_fields.insert(3, "alcohol_content")
+
+        color_mode = self._color_mode(application_values)
+        if color_mode == "required":
+            requested_fields.insert(-1, "color_additive_disclosure")
+        else:
+            deterministic_fields["color_additive_disclosure"] = {
+                "status": "pass",
+                "application_value": "Not Required",
+                "label_value": "Not Required",
+                "reason": (
+                    "Backend applicability: Malt color additive disclosure is not "
+                    "required for this row."
+                ),
+                "evidence": [],
+            }
 
         return VerificationPlan(
             requested_fields=tuple(requested_fields),
@@ -351,33 +395,53 @@ HARD RULES:
             return "required"
 
         beverage_class = self._normalize_beverage_class(application_values.get("beverage_class"))
-        alcohol_content = application_values.get("alcohol_content")
+        alcohol_content = self._clean_text(application_values.get("alcohol_content"))
         class_type = application_values.get("class_type_designation")
 
         if beverage_class == "spirits":
             return "required"
 
-        if self._has_text(alcohol_content):
+        if beverage_class == "malt":
+            if self._is_truthy(application_values.get("malt_added_nonbeverage_alcohol")):
+                return "required"
+            return "not_required_malt"
+
+        if beverage_class == "wine":
+            abv = self._parse_abv(alcohol_content)
+            if abv is not None and abv > 14:
+                return "required"
+            if self._is_table_or_light_wine(class_type) and (
+                abv is None or 7 <= abv <= 14
+            ):
+                return "not_required_table_wine"
             return "required"
 
-        if beverage_class == "wine" and self._is_table_or_light_wine(class_type):
-            return "not_required_table_wine"
-
         return "optional"
+
+    def _color_mode(self, application_values: ApplicationValues | None) -> str:
+        if application_values is None:
+            return "not_required"
+        beverage_class = self._normalize_beverage_class(application_values.get("beverage_class"))
+        if beverage_class == "malt" and self._is_truthy(
+            application_values.get("malt_color_additive_applicable")
+        ):
+            return "required"
+        return "not_required"
 
     def _country_mode(self, application_values: ApplicationValues | None) -> str:
         if application_values is None:
             return "unknown"
 
-        country = self._clean(application_values.get("country_of_origin")).lower()
-        if country == "domestic":
+        country = self._clean_text(application_values.get("country_of_origin"))
+        normalized = country.lower()
+        if not normalized:
+            return "unknown"
+        if normalized == "domestic":
             return "domestic"
-        if country == "imported":
-            return "imported"
-        return "unknown"
+        return f"country:{country}"
 
-    def _normalize_beverage_class(self, value: str | None) -> str | None:
-        normalized = self._clean(value).lower().replace("-", "_").replace(" ", "_")
+    def _normalize_beverage_class(self, value: str | bool | None) -> str | None:
+        normalized = self._clean_text(value).lower().replace("-", "_").replace(" ", "_")
         if normalized in {"spirits", "distilled_spirits", "distilled"}:
             return "spirits"
         if normalized in {"wine", "wines"}:
@@ -386,12 +450,27 @@ HARD RULES:
             return "malt"
         return None
 
-    def _is_table_or_light_wine(self, value: str | None) -> bool:
-        normalized = self._clean(value).lower()
+    def _is_table_or_light_wine(self, value: str | bool | None) -> bool:
+        normalized = self._clean_text(value).lower()
         return bool(re.search(r"\b(table|light)\s+wine\b", normalized))
 
-    def _has_text(self, value: str | None) -> bool:
-        return bool(self._clean(value))
+    def _parse_abv(self, value: str | None) -> float | None:
+        if not value:
+            return None
+        match = re.search(r"(\d+(?:[.,]\d+)?)", value)
+        if not match:
+            return None
+        try:
+            return float(match.group(1).replace(",", "."))
+        except ValueError:
+            return None
 
-    def _clean(self, value: str | None) -> str:
+    def _is_truthy(self, value: str | bool | None) -> bool:
+        if isinstance(value, bool):
+            return value
+        return self._clean_text(value).lower() in {"1", "true", "yes", "y", "on"}
+
+    def _clean_text(self, value: str | bool | None) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
         return (value or "").strip()

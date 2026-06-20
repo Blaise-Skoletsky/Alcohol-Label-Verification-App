@@ -17,6 +17,8 @@ export type ApplicationValuePayload = {
   net_contents?: string;
   name_address?: string;
   country_of_origin?: string;
+  malt_added_nonbeverage_alcohol?: boolean;
+  malt_color_additive_applicable?: boolean;
 };
 
 export type BatchRowPayload = ApplicationValuePayload & { filename: string };
@@ -33,6 +35,8 @@ function appendValues(formData: FormData, values: ApplicationValuePayload) {
   for (const [key, value] of Object.entries(values)) {
     if (typeof value === "string" && value.trim().length > 0) {
       formData.append(key, value);
+    } else if (typeof value === "boolean") {
+      formData.append(key, value ? "true" : "false");
     }
   }
 }
@@ -79,28 +83,6 @@ export async function getBatch(batchId: string) {
     throw await buildApiError(response, "We could not load the latest batch status.");
   }
   return response.json() as Promise<unknown>;
-}
-
-export type ParsedSheet = {
-  columns: string[];
-  rows: Array<Record<string, string>>;
-  row_count: number;
-};
-
-export async function parseSheet(file: File) {
-  const formData = new FormData();
-  formData.append("file", file);
-
-  const response = await fetch("/api/sheets/parse", {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw await buildApiError(response, "We could not read this spreadsheet.");
-  }
-
-  return response.json() as Promise<ParsedSheet>;
 }
 
 async function buildApiError(response: Response, fallbackMessage: string) {

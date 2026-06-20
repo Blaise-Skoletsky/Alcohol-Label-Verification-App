@@ -8,6 +8,16 @@ from app.models.verification import (
 from app.providers.base import ProviderResult
 
 
+GOVERNMENT_WARNING_PREFIX = "GOVERNMENT WARNING:"
+GOVERNMENT_WARNING_BODY = (
+    "(1) According to the Surgeon General, women should not drink alcoholic beverages "
+    "during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic "
+    "beverages impairs your ability to drive a car or operate machinery, and may cause "
+    "health problems."
+)
+GOVERNMENT_WARNING_FULL_TEXT = f"{GOVERNMENT_WARNING_PREFIX} {GOVERNMENT_WARNING_BODY}"
+
+
 class ResultGuardService:
     def enforce(self, result: ProviderResult) -> ProviderResult:
         guarded_fields = VerificationFields(
@@ -18,7 +28,10 @@ class ResultGuardService:
             net_contents=self._guard_required_values(result.fields.net_contents),
             name_address=self._guard_required_values(result.fields.name_address),
             country_of_origin=self._guard_required_values(result.fields.country_of_origin),
-            government_warning=self._guard_required_values(result.fields.government_warning),
+            color_additive_disclosure=self._guard_required_values(
+                result.fields.color_additive_disclosure
+            ),
+            government_warning=self._guard_government_warning(result.fields.government_warning),
         )
         overall_status = self._overall_status(guarded_fields)
         return ProviderResult(
@@ -29,6 +42,9 @@ class ResultGuardService:
         )
 
     def _guard_required_values(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if self._is_backend_not_required(field):
+            return field.model_copy(update={"status": "pass"})
+
         if field.status == "pass" and (
             not self._has_reviewable_value(field.application_value)
             or not self._has_reviewable_value(field.label_value)
@@ -40,6 +56,38 @@ class ResultGuardService:
                 }
         )
         return field
+
+    def _guard_government_warning(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        field = self._guard_required_values(field)
+        if field.status != "pass":
+            return field
+
+        label_value = field.label_value or ""
+        if GOVERNMENT_WARNING_PREFIX not in label_value:
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": (
+                        "Government warning can pass only when the prefix "
+                        "'GOVERNMENT WARNING:' is visible in all caps."
+                    ),
+                }
+            )
+
+        after_prefix = label_value.split(GOVERNMENT_WARNING_PREFIX, 1)[1]
+        body = after_prefix.strip()
+        if not self._normalized_warning_body_matches(body):
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": (
+                        "Government warning can pass only when the exact federal "
+                        "warning text is visible word-for-word with no missing or changed words."
+                    ),
+                }
+            )
+
+        return field.model_copy(update={"status": "pass"})
 
     def _guard_artifact_legibility(self, field: VerificationFieldResult) -> VerificationFieldResult:
         if field.status == "pass" and not self._has_reviewable_value(field.label_value):
@@ -150,6 +198,16 @@ class ResultGuardService:
     def _is_bare_number(self, value: str) -> bool:
         return re.fullmatch(r"\s*\d+(?:[\.,]\d+)?\s*", value) is not None
 
+    def _normalized_warning_body_matches(self, value: str) -> bool:
+        actual = self._normalize_warning_text(value)
+        expected = self._normalize_warning_text(GOVERNMENT_WARNING_BODY)
+        return actual.startswith(expected)
+
+    def _normalize_warning_text(self, value: str) -> str:
+        normalized = value.replace("\u00a0", " ")
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized.strip().lower()
+
     def _overall_status(self, fields: VerificationFields) -> VerificationStatus:
         field_statuses = [
             fields.artifact_legibility.status,
@@ -159,6 +217,7 @@ class ResultGuardService:
             fields.net_contents.status,
             fields.name_address.status,
             fields.country_of_origin.status,
+            fields.color_additive_disclosure.status,
             fields.government_warning.status,
         ]
         if "fail" in field_statuses:
@@ -189,6 +248,7 @@ class ResultGuardService:
             "net_contents": "net contents",
             "name_address": "name/address",
             "country_of_origin": "country of origin",
+            "color_additive_disclosure": "color additive disclosure",
             "government_warning": "government warning",
         }
         dumped = fields.model_dump()

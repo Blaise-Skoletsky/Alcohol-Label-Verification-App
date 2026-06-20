@@ -45,7 +45,9 @@ export function LabelListView({
       ) : (
         rows.map((row) => {
           const isSelected = selected.has(row.localId);
-          const tone = STATUS_TONES[row.status];
+          const isEdited = row.edited && Boolean(row.fields);
+          const tone = isEdited ? "edited" : STATUS_TONES[row.status];
+          const statusLabel = isEdited ? "Edited" : STATUS_LABELS[row.status];
           return (
             <div
               key={row.localId}
@@ -84,7 +86,10 @@ export function LabelListView({
               <span className="checks-cell">
                 {miniChecks(row).map((check) => (
                   <span key={check.key} className="check-item">
-                    <span className={`mini-check-dot tone-${check.tone}`} aria-hidden="true" />
+                    <span
+                      className={`mini-check-dot tone-${isEdited ? "edited" : check.tone}`}
+                      aria-hidden="true"
+                    />
                     <span className="check-item-label">{check.short}</span>
                   </span>
                 ))}
@@ -93,7 +98,7 @@ export function LabelListView({
               <span>
                 <span className={`status-pill tone-${tone}`}>
                   <span className={`status-pill-dot tone-${tone}`} aria-hidden="true" />
-                  {STATUS_LABELS[row.status]}
+                  {statusLabel}
                 </span>
               </span>
 

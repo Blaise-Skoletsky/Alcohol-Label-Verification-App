@@ -60,7 +60,7 @@ const metadata = {
       alcohol_content: "Alc. 14.5% by Vol.",
       net_contents: "750 ml",
       name_address: "Imported by GV Berkeley LLC, Berkeley, California",
-      country_of_origin: "Imported",
+      country_of_origin: "Spain",
     },
   },
   "pass/apple_brandy_2016-11-02.png": {
@@ -87,7 +87,7 @@ const metadata = {
       net_contents: "Net cont. 750 ml",
       name_address:
         "Bottled by Societa Agricola Cipriana S.R.L., Spirano - Italia; Imported by Buta - Distributors Inc., Boca Raton, FL",
-      country_of_origin: "Imported",
+      country_of_origin: "Italy",
     },
   },
   "pass/barenjager_2011-03-09_11038001000727.png": {
@@ -101,7 +101,7 @@ const metadata = {
       net_contents: "50 ml",
       name_address:
         "Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY; produced and bottled in Germany",
-      country_of_origin: "Imported",
+      country_of_origin: "Germany",
     },
   },
   "pass/barenjager_2011-06-28.png": {
@@ -115,7 +115,7 @@ const metadata = {
       net_contents: "50 ml",
       name_address:
         "Imported by Sidney Frank Importing Co. Inc., New Rochelle, N.Y.; produced & bottled in Germany",
-      country_of_origin: "Imported",
+      country_of_origin: "Germany",
     },
   },
   "pass/blazic_2019-08-19.png": {
@@ -129,7 +129,7 @@ const metadata = {
       net_contents: "750 ml content",
       name_address:
         "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
-      country_of_origin: "Imported",
+      country_of_origin: "Italy",
     },
   },
   "pass/blazic_2019-08-19_19213001000687.png": {
@@ -143,7 +143,7 @@ const metadata = {
       net_contents: "750 ml content",
       name_address:
         "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
-      country_of_origin: "Imported",
+      country_of_origin: "Italy",
     },
   },
   "pass/blue_ridge_winery_llc_2018-08-24.png": {
@@ -173,9 +173,9 @@ const metadata = {
       country_of_origin: "Domestic",
     },
   },
-  "pass/brook_and_bull_2018-01-10.png": {
+  "fail/brook_and_bull_2018-01-10.png": {
     brand: "Brook & Bull",
-    desc: "Expected pass: application values match The Few and Far Between red wine label.",
+    desc: "Expected fail: net contents are not present on the label.",
     applicationValues: {
       brand_name: "Brook & Bull",
       beverage_class: "wine",
@@ -210,12 +210,12 @@ const metadata = {
       alcohol_content: "14.5% by vol.",
       net_contents: "750 ml",
       name_address: "Bottled by Az. Ag. Ca Piadera S.S., Tarzo (TV), Italy",
-      country_of_origin: "Imported",
+      country_of_origin: "Italy",
     },
   ),
   "fail/cold_spring_brewery_2019-12-20.png": failMetadata(
     "Cold Spring Brewery",
-    "Expected fail: domestic malt label is submitted as Imported while alcohol content is federally optional.",
+    "Expected fail: domestic malt label is submitted as Canada while alcohol content is federally optional.",
     {
       brand_name: "Cold Spring Brewery",
       beverage_class: "malt",
@@ -223,7 +223,7 @@ const metadata = {
       alcohol_content: "",
       net_contents: "750 ml",
       name_address: "Brewed by Cold Spring Brewery, Cold Spring, MN",
-      country_of_origin: "Imported",
+      country_of_origin: "Canada",
     },
   ),
   "fail/duck_walk_vineyards_2014-10-15_14275001000239.png": failMetadata(
@@ -294,7 +294,7 @@ const metadata = {
   ),
   "fail/good_people_brewing_company_2016-08-12.png": failMetadata(
     "Good People Brewing Company",
-    "Expected fail: malt label uses optional blank ABV, but the application says Imported for a domestic label.",
+    "Expected fail: malt label uses optional blank ABV, but the application says Canada for a domestic label.",
     {
       brand_name: "Good People Brewing Company",
       beverage_class: "malt",
@@ -302,7 +302,7 @@ const metadata = {
       alcohol_content: "",
       net_contents: "12 fl oz",
       name_address: "Bottled by Good People Brewing Company, Birmingham, AL",
-      country_of_origin: "Imported",
+      country_of_origin: "Canada",
     },
   ),
 
@@ -320,19 +320,6 @@ const metadata = {
       country_of_origin: "Domestic",
     },
   },
-  "fail/boones_mill_2017-11-24_titlecase_warning.png": {
-    brand: "Boones Mill",
-    desc: "Expected fail: the government warning heading was changed to title case.",
-    applicationValues: {
-      brand_name: "Boones Mill",
-      beverage_class: "spirits",
-      class_type_designation: "Apple Brandy",
-      alcohol_content: "50% Alc/Vol",
-      net_contents: "375 ml",
-      name_address: "Bottled by Franklin County Distilleries, Franklin County, Virginia 24176",
-      country_of_origin: "Domestic",
-    },
-  },
   "fail/cantine_mothia_2018-11-15_warning_covered.png": {
     brand: "Dedicato a Francesco",
     desc: "Expected fail: the government warning block was visibly covered.",
@@ -344,7 +331,7 @@ const metadata = {
       net_contents: "Net contents 750 ml",
       name_address:
         "Product and bottled by Cantine Mothia S.r.l., Marsala (Italia); Imported by Buta Distributors Inc., Boca Raton (FL)",
-      country_of_origin: "Imported",
+      country_of_origin: "Italy",
     },
   },
   "fail/chaglasian_winery_and_vineyards_2019-05-14_19120001000487_warning_removed.png": {
@@ -358,7 +345,7 @@ const metadata = {
       net_contents: "Net cont. 750 ml",
       name_address:
         "Imported by Justabout Winery LLC, Venetia, PA, USA; Estate grown and bottled by Chaglasian Winery & Vineyards, San Rafael, Mendoza",
-      country_of_origin: "Imported",
+      country_of_origin: "Argentina",
     },
   },
   "fail/cleo_2019-04-17_lowercase_warning.png": {
@@ -385,7 +372,7 @@ const metadata = {
       net_contents: "720 ml",
       name_address:
         "Produced by Gekkeikan Sake Company, Ltd.; Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY",
-      country_of_origin: "Imported",
+      country_of_origin: "Japan",
     },
   },
   "fail/karnobatska_2018-08-20_blurry_warning.png": {
@@ -399,7 +386,7 @@ const metadata = {
       net_contents: "1 L",
       name_address:
         "Produced and bottled by SIS Industries OOD, Bulgaria; Imported by Malinka Imports LLC, Palatine, IL 60067",
-      country_of_origin: "Imported",
+      country_of_origin: "Bulgaria",
     },
   },
 };
@@ -457,6 +444,8 @@ export interface SampleApplicationValues {
   net_contents: string;
   name_address: string;
   country_of_origin: string;
+  malt_added_nonbeverage_alcohol?: boolean;
+  malt_color_additive_applicable?: boolean;
 }
 
 export interface SampleEntry {

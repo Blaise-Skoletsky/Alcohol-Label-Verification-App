@@ -80,7 +80,8 @@ export function SamplePickerModal({ open, onClose, onLoad }: Props) {
   }
 
   const n = selected.length;
-  const runLabel = n === 0 ? "Select labels" : `Load ${n} label${n === 1 ? "" : "s"}`;
+  const runLabel =
+    n === 0 ? "Select labels" : `Load & verify ${n} label${n === 1 ? "" : "s"}`;
 
   return (
     <div

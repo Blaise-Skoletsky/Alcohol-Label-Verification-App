@@ -20,8 +20,10 @@ class ApplicationValues(BaseModel):
     net_contents: str | None = None
     name_address: str | None = None
     country_of_origin: str | None = None
+    malt_added_nonbeverage_alcohol: bool | None = None
+    malt_color_additive_applicable: bool | None = None
 
-    def to_prompt_mapping(self) -> dict[str, str | None]:
+    def to_prompt_mapping(self) -> dict[str, str | bool | None]:
         """Values keyed exactly as the verification prompt expects them.
 
         ``beverage_class`` is included so the prompt service can choose the
@@ -37,4 +39,6 @@ class ApplicationValues(BaseModel):
             "net_contents": self.net_contents,
             "name_address": self.name_address,
             "country_of_origin": self.country_of_origin,
+            "malt_added_nonbeverage_alcohol": self.malt_added_nonbeverage_alcohol,
+            "malt_color_additive_applicable": self.malt_color_additive_applicable,
         }

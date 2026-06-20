@@ -178,6 +178,12 @@ const FIELD_SOURCE_KEYS: Record<FieldSummary["key"], string[]> = {
   net_contents: ["net_contents", "netContents", "net_content", "contents"],
   name_address: ["name_address", "nameAddress", "name_and_address", "nameAndAddress"],
   country_of_origin: ["country_of_origin", "countryOfOrigin", "country"],
+  color_additive_disclosure: [
+    "color_additive_disclosure",
+    "colorAdditiveDisclosure",
+    "color_additive",
+    "colorAdditive",
+  ],
   government_warning: ["government_warning", "governmentWarning", "warning"],
 };
 

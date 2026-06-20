@@ -22,6 +22,7 @@ VERIFICATION_FIELD_NAMES = (
     "net_contents",
     "name_address",
     "country_of_origin",
+    "color_additive_disclosure",
     "government_warning",
 )
 

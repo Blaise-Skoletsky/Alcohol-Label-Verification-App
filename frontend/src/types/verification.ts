@@ -16,6 +16,7 @@ export type FieldKey =
   | "net_contents"
   | "name_address"
   | "country_of_origin"
+  | "color_additive_disclosure"
   | "government_warning";
 
 export type FieldSummary = {
@@ -40,6 +41,8 @@ export type LabelRow = {
   net: string;
   nameAddr: string;
   country: string;
+  maltAddedNonbeverageAlcohol: boolean;
+  maltColorAdditiveApplicable: boolean;
   fileName: string;
   imageUrl: string | null;
   imageFile: File | null;
@@ -51,6 +54,7 @@ export type LabelRow = {
   updatedAtLabel: string;
   flagged: boolean;
   edited: boolean;
+  dirtyFields: FieldKey[];
   serverId?: string;
   batchId?: string;
 };
@@ -82,5 +86,6 @@ export const FIELD_DEFS: Array<{ key: FieldKey; label: string; short: string }> 
   { key: "class_type_designation", label: "Class/type designation", short: "Type" },
   { key: "name_address", label: "Name & address", short: "Addr" },
   { key: "country_of_origin", label: "Country of origin", short: "Origin" },
+  { key: "color_additive_disclosure", label: "Color additive disclosure", short: "Color" },
   { key: "artifact_legibility", label: "Artifact legibility", short: "Read" },
 ];

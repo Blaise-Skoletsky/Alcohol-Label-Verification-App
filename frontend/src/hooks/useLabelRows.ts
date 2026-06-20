@@ -10,7 +10,7 @@ import { formatTimestamp } from "../lib/format";
 import { normalizeResultCore } from "../lib/resultNormalization";
 import { findArray, findRecord, findString } from "../lib/objectLookup";
 import { normalizeStatus } from "../lib/status";
-import type { BeverageClass, LabelRow, UiStatus } from "../types/verification";
+import type { BeverageClass, FieldKey, LabelRow, UiStatus } from "../types/verification";
 
 let rowCounter = 0;
 
@@ -29,6 +29,8 @@ export type NewRowInput = Partial<
     | "net"
     | "nameAddr"
     | "country"
+    | "maltAddedNonbeverageAlcohol"
+    | "maltColorAdditiveApplicable"
     | "fileName"
     | "imageUrl"
     | "imageFile"
@@ -47,6 +49,8 @@ export function makeRow(input: NewRowInput = {}): LabelRow {
     net: input.net ?? "",
     nameAddr: input.nameAddr ?? "",
     country: input.country ?? "",
+    maltAddedNonbeverageAlcohol: input.maltAddedNonbeverageAlcohol ?? false,
+    maltColorAdditiveApplicable: input.maltColorAdditiveApplicable ?? false,
     fileName: input.fileName ?? (input.imageFile?.name ?? ""),
     imageUrl: input.imageUrl ?? null,
     imageFile: input.imageFile ?? null,
@@ -57,14 +61,24 @@ export function makeRow(input: NewRowInput = {}): LabelRow {
     updatedAtLabel: "—",
     flagged: input.flagged ?? false,
     edited: false,
+    dirtyFields: [],
   };
 }
 
-const EDITABLE_FIELDS = ["brand", "classType", "net", "nameAddr"] as const;
-
 export function rowReady(row: LabelRow): boolean {
   const hasImage = Boolean(row.imageFile || row.sampleUrl);
-  return hasImage && EDITABLE_FIELDS.every((key) => String(row[key] || "").trim().length > 0);
+  if (!hasImage) return false;
+
+  const baseReady = [row.brand, row.classType, row.net, row.nameAddr, row.country].every(
+    (value) => value.trim().length > 0,
+  );
+  if (!baseReady) return false;
+
+  if (row.beverageClass === "spirits") return row.abv.trim().length > 0;
+  if (row.beverageClass === "malt") {
+    return !row.maltAddedNonbeverageAlcohol || row.abv.trim().length > 0;
+  }
+  return isTableOrLightWine(row.classType) || row.abv.trim().length > 0;
 }
 
 function rowValues(row: LabelRow): BatchRowPayload {
@@ -77,7 +91,13 @@ function rowValues(row: LabelRow): BatchRowPayload {
     net_contents: row.net,
     name_address: row.nameAddr,
     country_of_origin: row.country,
+    malt_added_nonbeverage_alcohol: row.maltAddedNonbeverageAlcohol,
+    malt_color_additive_applicable: row.maltColorAdditiveApplicable,
   };
+}
+
+function isTableOrLightWine(value: string): boolean {
+  return /\b(table|light)\s+wine\b/i.test(value);
 }
 
 async function ensureFile(row: LabelRow): Promise<File | null> {
@@ -103,6 +123,7 @@ export type StatusCounts = {
   total: number;
   pass: number;
   fail: number;
+  edited: number;
   notRun: number;
 };
 
@@ -118,9 +139,10 @@ export function useLabelRows(notify: Notify) {
   }, [rows]);
 
   const statusCounts = useMemo<StatusCounts>(() => {
-    const counts: StatusCounts = { total: rows.length, pass: 0, fail: 0, notRun: 0 };
+    const counts: StatusCounts = { total: rows.length, pass: 0, fail: 0, edited: 0, notRun: 0 };
     for (const row of rows) {
-      if (row.status === "pass") counts.pass += 1;
+      if (row.edited && row.fields) counts.edited += 1;
+      else if (row.status === "pass") counts.pass += 1;
       else if (row.status === "fail" || row.status === "processing-error") counts.fail += 1;
       else counts.notRun += 1;
     }
@@ -133,7 +155,16 @@ export function useLabelRows(notify: Notify) {
 
   function editRow(id: string, patch: NewRowInput) {
     setRows((current) =>
-      current.map((row) => (row.localId === id ? { ...row, ...patch, edited: true } : row)),
+      current.map((row) =>
+        row.localId === id
+          ? {
+              ...row,
+              ...patch,
+              edited: true,
+              dirtyFields: mergeDirtyFields(row.dirtyFields ?? [], dirtyFieldKeysForPatch(patch)),
+            }
+          : row,
+      ),
     );
   }
 
@@ -179,6 +210,23 @@ export function useLabelRows(notify: Notify) {
     setActiveBatchId(null);
   }
 
+  // Replace the workspace with `next`, then immediately verify the given rows.
+  // Used by the batch-upload flow ("Verify N labels"): every row lands in the
+  // workspace, but only the complete/matched subset starts verifying — the rest
+  // stay as drafts for later.
+  function replaceAndVerify(next: LabelRow[], verifyIds: string[]) {
+    setRows((current) => {
+      for (const row of current) {
+        if (row.imageUrl && row.imageUrl.startsWith("blob:")) URL.revokeObjectURL(row.imageUrl);
+      }
+      return next;
+    });
+    // verifyRows reads from rowsRef synchronously, so seed it before calling.
+    rowsRef.current = next;
+    setActiveBatchId(null);
+    if (verifyIds.length > 0) verifyRows(verifyIds);
+  }
+
   async function verifySingle(id: string) {
     const row = rowsRef.current.find((entry) => entry.localId === id);
     if (!row) return;
@@ -188,7 +236,12 @@ export function useLabelRows(notify: Notify) {
       notify("Attach an image before verifying this label.");
       return;
     }
-    patchRow(id, { status: "processing", summary: "Verifying this label…", edited: false });
+    patchRow(id, {
+      status: "processing",
+      summary: "Verifying this label…",
+      edited: false,
+      dirtyFields: [],
+    });
     try {
       const payload = await verifyRowRequest(file, rowValues(row));
       const core = normalizeResultCore(payload);
@@ -233,7 +286,13 @@ export function useLabelRows(notify: Notify) {
     setRows((current) =>
       current.map((row) =>
         orderedIds.includes(row.localId)
-          ? { ...row, status: "processing", summary: "Verifying…", edited: false }
+          ? {
+              ...row,
+              status: "processing",
+              summary: "Verifying…",
+              edited: false,
+              dirtyFields: [],
+            }
           : row,
       ),
     );
@@ -334,6 +393,7 @@ export function useLabelRows(notify: Notify) {
     addBlankRow,
     removeRow,
     replaceRows,
+    replaceAndVerify,
     verifyRows,
   };
 }
@@ -341,6 +401,29 @@ export function useLabelRows(notify: Notify) {
 function friendlyError(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.message.trim().length > 0) return error.message;
   return fallback;
+}
+
+function dirtyFieldKeysForPatch(patch: NewRowInput): FieldKey[] {
+  const keys = new Set<FieldKey>();
+  if ("brand" in patch) keys.add("brand_name");
+  if ("classType" in patch) keys.add("class_type_designation");
+  if ("abv" in patch) keys.add("alcohol_content");
+  if ("net" in patch) keys.add("net_contents");
+  if ("nameAddr" in patch) keys.add("name_address");
+  if ("country" in patch) keys.add("country_of_origin");
+  if ("maltAddedNonbeverageAlcohol" in patch) keys.add("alcohol_content");
+  if ("maltColorAdditiveApplicable" in patch) keys.add("color_additive_disclosure");
+  if ("beverageClass" in patch) {
+    keys.add("class_type_designation");
+    keys.add("alcohol_content");
+    keys.add("color_additive_disclosure");
+  }
+  return [...keys];
+}
+
+function mergeDirtyFields(current: FieldKey[], next: FieldKey[]): FieldKey[] {
+  if (next.length === 0) return current;
+  return [...new Set([...current, ...next])];
 }
 
 export const BEVERAGE_CLASS_LABELS: Record<BeverageClass, string> = {
