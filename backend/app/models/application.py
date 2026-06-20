@@ -24,13 +24,14 @@ class ApplicationValues(BaseModel):
     def to_prompt_mapping(self) -> dict[str, str | None]:
         """Values keyed exactly as the verification prompt expects them.
 
-        ``beverage_class`` is intentionally omitted: the prompt reasons about
-        the beverage class from ``class_type_designation`` and the label, and
-        ``VerificationPromptService`` only reads the six comparison fields.
+        ``beverage_class`` is included so the prompt service can choose the
+        applicable verification checks before asking the model to inspect the
+        label.
         """
 
         return {
             "brand_name": self.brand_name,
+            "beverage_class": self.beverage_class,
             "class_type_designation": self.class_type_designation,
             "alcohol_content": self.alcohol_content,
             "net_contents": self.net_contents,

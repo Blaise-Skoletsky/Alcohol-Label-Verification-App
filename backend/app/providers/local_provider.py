@@ -8,7 +8,7 @@ from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.providers.base import ProviderError, ProviderResult
 from app.providers.chat_completion_parser import parse_chat_completion_response
-from app.services.verification_prompt_service import VerificationPromptService
+from app.services.verification_prompt_service import VerificationPrompt, VerificationPromptService
 
 
 class LocalModelVerificationProvider:
@@ -30,7 +30,8 @@ class LocalModelVerificationProvider:
         application_values: ApplicationValues | None = None,
     ) -> ProviderResult:
         started = time.perf_counter()
-        payload = self._build_payload(upload=upload, application_values=application_values)
+        prompt = self._build_prompt(application_values)
+        payload = self._build_payload(upload=upload, prompt=prompt)
         headers = {"Content-Type": "application/json"}
 
         try:
@@ -44,6 +45,7 @@ class LocalModelVerificationProvider:
                     provider_mode=self._settings.provider_mode,
                     started=started,
                     attempted_models=[self._model],
+                    deterministic_fields=prompt.deterministic_fields,
                 )
         except httpx.TimeoutException as exc:
             raise ProviderError(
@@ -62,10 +64,9 @@ class LocalModelVerificationProvider:
         self,
         upload: ValidatedUpload,
         application_values: ApplicationValues | None = None,
+        prompt: VerificationPrompt | None = None,
     ) -> dict:
-        prompt = self._prompt_service.build_prompt(
-            application_values.to_prompt_mapping() if application_values else None
-        )
+        prompt = prompt or self._build_prompt(application_values)
         return {
             "model": self._model,
             "messages": [
@@ -86,6 +87,11 @@ class LocalModelVerificationProvider:
             "max_tokens": 1800,
             "stream": False,
         }
+
+    def _build_prompt(self, application_values: ApplicationValues | None) -> VerificationPrompt:
+        return self._prompt_service.build_prompt(
+            application_values.to_prompt_mapping() if application_values else None
+        )
 
     def _build_image_part(self, upload: ValidatedUpload) -> dict:
         if upload.extension not in {".png", ".jpg", ".jpeg"}:

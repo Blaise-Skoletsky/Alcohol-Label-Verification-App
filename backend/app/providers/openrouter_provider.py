@@ -8,7 +8,7 @@ from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.providers.base import ProviderError, ProviderResult
 from app.providers.chat_completion_parser import parse_chat_completion_response
-from app.services.verification_prompt_service import VerificationPromptService
+from app.services.verification_prompt_service import VerificationPrompt, VerificationPromptService
 
 
 class OpenRouterVerificationProvider:
@@ -44,12 +44,11 @@ class OpenRouterVerificationProvider:
 
         attempted_models: list[str] = []
         last_error: ProviderError | None = None
+        prompt = self._build_prompt(application_values)
         async with httpx.AsyncClient(timeout=self._settings.provider_timeout_seconds) as client:
             for model in self._models:
                 attempted_models.append(model)
-                payload = self._build_payload(
-                    model=model, upload=upload, application_values=application_values
-                )
+                payload = self._build_payload(model=model, upload=upload, prompt=prompt)
                 try:
                     response = await client.post(
                         self._provider_url,
@@ -62,6 +61,7 @@ class OpenRouterVerificationProvider:
                         model=model,
                         started=started,
                         attempted_models=attempted_models,
+                        deterministic_fields=prompt.deterministic_fields,
                     )
                 except httpx.TimeoutException as exc:
                     last_error = ProviderError(
@@ -99,10 +99,9 @@ class OpenRouterVerificationProvider:
         model: str,
         upload: ValidatedUpload,
         application_values: ApplicationValues | None = None,
+        prompt: VerificationPrompt | None = None,
     ) -> dict:
-        prompt = self._prompt_service.build_prompt(
-            application_values.to_prompt_mapping() if application_values else None
-        )
+        prompt = prompt or self._build_prompt(application_values)
         content = [{"type": "text", "text": prompt.user_instruction}]
         content.append(self._build_artifact_part(upload))
         payload = {
@@ -121,6 +120,11 @@ class OpenRouterVerificationProvider:
         }
         return payload
 
+    def _build_prompt(self, application_values: ApplicationValues | None) -> VerificationPrompt:
+        return self._prompt_service.build_prompt(
+            application_values.to_prompt_mapping() if application_values else None
+        )
+
     def _build_artifact_part(self, upload: ValidatedUpload) -> dict:
         encoded = b64encode(upload.content).decode("ascii")
         mime_type = "image/png" if upload.extension == ".png" else "image/jpeg"
@@ -137,6 +141,7 @@ class OpenRouterVerificationProvider:
         model: str,
         started: float,
         attempted_models: list[str],
+        deterministic_fields: dict | None = None,
     ) -> ProviderResult:
         return parse_chat_completion_response(
             response=response,
@@ -145,4 +150,5 @@ class OpenRouterVerificationProvider:
             provider_mode=self._settings.provider_mode,
             started=started,
             attempted_models=attempted_models,
+            deterministic_fields=deterministic_fields,
         )

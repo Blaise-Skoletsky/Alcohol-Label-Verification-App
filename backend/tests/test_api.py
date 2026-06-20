@@ -21,6 +21,7 @@ from app.models.verification import (
 from app.providers.openrouter_provider import OpenRouterVerificationProvider
 from app.providers.local_provider import LocalModelVerificationProvider
 from app.providers.base import ProviderResult
+from app.providers.chat_completion_parser import parse_chat_completion_response
 from app.services.batch_service import BatchService
 from app.services.result_guard_service import ResultGuardService
 from app.services.verification_prompt_service import VerificationPromptService
@@ -355,7 +356,7 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "country_of_origin" in system_text
     assert "government_warning" in system_text
     assert "Each field object must be" in system_text
-    assert "Required fields: artifact_legibility" in system_text
+    assert "Requested fields: artifact_legibility" in system_text
     assert "application_value='Required federal government warning'" in system_text
     assert "APPLICATION_VALUES_JSON" in system_text
     assert "The image is label artwork only" in system_text
@@ -363,18 +364,24 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "application_value='N/A - text entry form'" in system_text
     assert "FIELD 1 - artifact_legibility" in system_text
     assert "decimal comma = decimal point" in system_text
-    assert "prefix 'GOVERNMENT WARNING:' is all caps and bold" in system_text
-    assert "inferred from regulatory knowledge" in system_text
+    assert "prefix 'GOVERNMENT WARNING:' is all caps" in system_text
+    assert "body may be sentence case or all caps" in system_text
+    assert "do not fail solely because the body text is all caps" in system_text
+    assert "lowercase/title-case/mixed-case prefix" in system_text
+    assert "inferred from" in system_text
+    assert "regulatory knowledge" in system_text
     assert "Review the attached label artwork image using the system rules." in user_text
     assert "APPLICATION_VALUES_JSON" in user_text
     assert '"brand_name": "{{brand_name}}"' in user_text
-    assert "government_warning" not in user_text
+    assert '"beverage_class": "{{beverage_class}}"' in user_text
+    assert "government_warning" not in user_text.split("APPLICATION_VALUES_JSON:")[1]
 
 
 def test_verification_prompt_accepts_application_values() -> None:
     prompt = VerificationPromptService().build_prompt(
         {
             "brand_name": "Stone's Throw",
+            "beverage_class": "wine",
             "class_type_designation": "Wine",
             "alcohol_content": "13.5% ABV",
             "net_contents": "750 mL",
@@ -384,11 +391,127 @@ def test_verification_prompt_accepts_application_values() -> None:
     )
 
     assert "\"brand_name\": \"Stone's Throw\"" in prompt.user_instruction
+    assert '"beverage_class": "wine"' in prompt.user_instruction
     assert '"class_type_designation": "Wine"' in prompt.user_instruction
     assert '"alcohol_content": "13.5% ABV"' in prompt.user_instruction
     assert "The image is label artwork only" in prompt.system_instruction
     assert "never extract application values from it" in prompt.system_instruction
     assert "application_value='N/A - text entry form'" in prompt.system_instruction
+
+
+def test_prompt_skips_table_wine_alcohol_content_when_not_required() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Example",
+            "beverage_class": "wine",
+            "class_type_designation": "Table Wine",
+            "alcohol_content": "",
+            "net_contents": "750 mL",
+            "name_address": "Example Producer, Napa, CA",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "alcohol_content" not in prompt.requested_fields
+    assert "FIELD 4 - alcohol_content" not in prompt.system_instruction
+    assert "Requested fields:" in prompt.system_instruction
+    assert "alcohol_content" not in prompt.system_instruction.split("Requested fields: ")[1]
+    assert prompt.deterministic_fields["alcohol_content"]["status"] == "pass"
+    assert "Backend applicability" in prompt.deterministic_fields["alcohol_content"]["reason"]
+
+
+def test_prompt_allows_specific_wine_designation_for_table_wine_class_type() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "3 Steves Winery",
+            "beverage_class": "wine",
+            "class_type_designation": "Table Wine",
+            "alcohol_content": "",
+            "net_contents": "750 mL",
+            "name_address": "Bottled By 3 Steves Winery, Livermore, CA",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "If" in prompt.system_instruction
+    assert "application says Table Wine or Light Wine" in prompt.system_instruction
+    assert "Chardonnay" in prompt.system_instruction
+    assert "no conflicting class appears" in prompt.system_instruction
+
+
+def test_prompt_allows_class_type_modifiers_and_obvious_spelling_variants() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Blue Ridge",
+            "beverage_class": "wine",
+            "class_type_designation": "White grape wine with artificial flavor",
+            "alcohol_content": "Alc. 11% by vol.",
+            "net_contents": "750 mL",
+            "name_address": "Vinted and bottled by Blue Ridge Winery, LLC",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "Harmless descriptive modifiers" in prompt.system_instruction
+    assert "off dry" in prompt.system_instruction
+    assert "OCR/label spelling variants" in prompt.system_instruction
+    assert "artifical matching artificial" in prompt.system_instruction
+
+
+def test_prompt_allows_all_caps_government_warning_body() -> None:
+    prompt = VerificationPromptService().build_prompt()
+
+    assert "warning words and punctuation" in prompt.system_instruction
+    assert "body may be sentence case or all caps" in prompt.system_instruction
+    assert "do not fail solely because the body text is all caps" in prompt.system_instruction
+    assert "lowercase/title-case/mixed-case prefix" in prompt.system_instruction
+
+
+def test_prompt_requires_distilled_spirits_alcohol_content() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "beverage_class": "spirits",
+            "class_type_designation": "Vodka",
+            "alcohol_content": "",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "alcohol_content" in prompt.requested_fields
+    assert "Alcohol content is required or was submitted for comparison." in prompt.system_instruction
+    assert "distilled spirits" in prompt.system_instruction
+
+
+def test_prompt_uses_optional_malt_alcohol_content_guidance() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "beverage_class": "malt",
+            "class_type_designation": "Ale",
+            "alcohol_content": "",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "alcohol_content" in prompt.requested_fields
+    assert "Alcohol content may be optional" in prompt.system_instruction
+    assert "no added-nonbeverage alcohol trigger" in prompt.system_instruction
+    assert "visible" in prompt.system_instruction
+
+
+def test_prompt_targets_domestic_country_of_origin_check() -> None:
+    prompt = VerificationPromptService().build_prompt({"country_of_origin": "Domestic"})
+
+    assert "Application says Domestic" in prompt.system_instruction
+    assert "Product of" in prompt.system_instruction
+    assert "does not show an imported origin" in prompt.system_instruction
+
+
+def test_prompt_targets_imported_country_of_origin_check() -> None:
+    prompt = VerificationPromptService().build_prompt({"country_of_origin": "Imported"})
+
+    assert "Application says Imported" in prompt.system_instruction
+    assert "Product of Spain" in prompt.system_instruction
+    assert "exact country does not need to match" in prompt.system_instruction
 
 
 def test_verify_forwards_application_values_to_service() -> None:
@@ -407,7 +530,7 @@ def test_verify_forwards_application_values_to_service() -> None:
             "alcohol_content": "14.5%",
             "net_contents": "750 mL",
             "name_address": "Banfi Products Corp",
-            "country_of_origin": "Chile",
+            "country_of_origin": "Imported",
         },
     )
 
@@ -417,7 +540,7 @@ def test_verify_forwards_application_values_to_service() -> None:
     assert values.brand_name == "Coyam"
     assert values.beverage_class == "wine"
     assert values.net_contents == "750 mL"
-    assert values.country_of_origin == "Chile"
+    assert values.country_of_origin == "Imported"
     app.dependency_overrides.clear()
 
 
@@ -656,6 +779,55 @@ def test_openrouter_parser_accepts_string_evidence_items() -> None:
     assert result.fields.brand_name.evidence[0].summary == "Brand appears on label."
 
 
+def test_parser_fills_backend_deterministic_fields() -> None:
+    raw_fields = make_fields().model_dump()
+    raw_fields.pop("alcohol_content")
+    deterministic_fields = {
+        "alcohol_content": {
+            "status": "pass",
+            "application_value": "Not Required",
+            "label_value": "Not Required",
+            "reason": (
+                "Backend applicability: Alcohol content is not required for this "
+                "table/light wine designation."
+            ),
+            "evidence": [],
+        }
+    }
+    response = httpx.Response(
+        status_code=200,
+        json={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "status": "pass",
+                                "summary": "Requested fields passed.",
+                                "fields": raw_fields,
+                            }
+                        )
+                    }
+                }
+            ]
+        },
+    )
+
+    result = parse_chat_completion_response(
+        response=response,
+        model="test-model",
+        provider_name="test",
+        provider_mode="local",
+        started=time.perf_counter(),
+        attempted_models=["test-model"],
+        deterministic_fields=deterministic_fields,
+    )
+
+    assert result.fields.alcohol_content.status == "pass"
+    assert result.fields.alcohol_content.application_value == "Not Required"
+    assert "Backend applicability" in result.fields.alcohol_content.reason
+
+
 def test_result_guard_fails_non_abv_text_for_alcohol_content() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(
@@ -708,6 +880,33 @@ def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
     assert result.fields.alcohol_content.reason == (
         "Alcohol content is not required for this table/light wine designation."
     )
+
+
+def test_result_guard_passes_optional_malt_omission_without_trigger() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model passed optional malt omission.",
+            fields=make_fields(
+                alcohol_content=make_field(
+                    application_value="Not required for malt beverage",
+                    label_value="Not required for malt beverage",
+                    reason=(
+                        "Malt beverage alcohol content is federally optional; "
+                        "no added nonbeverage alcohol trigger is visible."
+                    ),
+                )
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.alcohol_content.status == "pass"
 
 
 def test_result_guard_treats_decimal_comma_as_matching_abv() -> None:

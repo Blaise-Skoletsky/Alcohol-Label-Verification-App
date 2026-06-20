@@ -12,15 +12,15 @@ const outPath = path.join(frontendRoot, "src", "generated", "sampleLabels.ts");
 const metadata = {
   "pass/3_steves_winery_2013-08-11.png": {
     brand: "3 Steves Winery",
-    desc: "Expected pass: application values match the 2012 Chardonnay label.",
+    desc: "Expected pass: domestic wine with table-wine alcohol-content omission treated as not required.",
     applicationValues: {
       brand_name: "3 Steves Winery",
       beverage_class: "wine",
-      class_type_designation: "Chardonnay",
-      alcohol_content: "Alc. 14.0% by Volume",
+      class_type_designation: "Table Wine",
+      alcohol_content: "",
       net_contents: "750 ml",
       name_address: "Bottled By 3 Steves Winery, Livermore, CA",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "pass/3_steves_winery_2017-05-25.png": {
@@ -34,7 +34,7 @@ const metadata = {
       net_contents: "750 ml",
       name_address:
         "Grown, Produced and Bottled by 3 Steves Winery, Livermore Valley, California",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "pass/3_steves_winery_2018-12-18.png": {
@@ -47,12 +47,12 @@ const metadata = {
       alcohol_content: "Alc. 13.2% by Volume",
       net_contents: "750 ml",
       name_address: "Bottled By 3 Steves Winery, Livermore, CA",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "pass/altos_2017-10-25.png": {
     brand: "Altos de Inurrieta",
-    desc: "Expected pass: application values match the imported Navarra red wine label.",
+    desc: "Expected pass: imported wine where application origin status is Imported and the label shows Spain.",
     applicationValues: {
       brand_name: "Altos de Inurrieta",
       beverage_class: "wine",
@@ -60,7 +60,7 @@ const metadata = {
       alcohol_content: "Alc. 14.5% by Vol.",
       net_contents: "750 ml",
       name_address: "Imported by GV Berkeley LLC, Berkeley, California",
-      country_of_origin: "Product of Spain",
+      country_of_origin: "Imported",
     },
   },
   "pass/apple_brandy_2016-11-02.png": {
@@ -73,7 +73,7 @@ const metadata = {
       alcohol_content: "43% Alc. by Vol.",
       net_contents: "375 ml",
       name_address: "Distilled and bottled by Dampfwerk Distilling, St Louis Park, MN 55416",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "pass/azienda_agricola_cipriana_2018-11-07_18309001000239.png": {
@@ -87,7 +87,7 @@ const metadata = {
       net_contents: "Net cont. 750 ml",
       name_address:
         "Bottled by Societa Agricola Cipriana S.R.L., Spirano - Italia; Imported by Buta - Distributors Inc., Boca Raton, FL",
-      country_of_origin: "Product of Italy",
+      country_of_origin: "Imported",
     },
   },
   "pass/barenjager_2011-03-09_11038001000727.png": {
@@ -101,7 +101,7 @@ const metadata = {
       net_contents: "50 ml",
       name_address:
         "Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY; produced and bottled in Germany",
-      country_of_origin: "Imported from Rinteln Germany",
+      country_of_origin: "Imported",
     },
   },
   "pass/barenjager_2011-06-28.png": {
@@ -115,7 +115,7 @@ const metadata = {
       net_contents: "50 ml",
       name_address:
         "Imported by Sidney Frank Importing Co. Inc., New Rochelle, N.Y.; produced & bottled in Germany",
-      country_of_origin: "Imported from Rinteln Germany",
+      country_of_origin: "Imported",
     },
   },
   "pass/blazic_2019-08-19.png": {
@@ -129,7 +129,7 @@ const metadata = {
       net_contents: "750 ml content",
       name_address:
         "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
-      country_of_origin: "Product of Italy",
+      country_of_origin: "Imported",
     },
   },
   "pass/blazic_2019-08-19_19213001000687.png": {
@@ -143,7 +143,7 @@ const metadata = {
       net_contents: "750 ml content",
       name_address:
         "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
-      country_of_origin: "Product of Italy",
+      country_of_origin: "Imported",
     },
   },
   "pass/blue_ridge_winery_llc_2018-08-24.png": {
@@ -157,7 +157,7 @@ const metadata = {
       net_contents: "750 ml",
       name_address:
         "Vinted and bottled by Blue Ridge Winery, LLC, 239 Blue Ridge Road, Saylorsburg, PA 18353",
-      country_of_origin: "Product of USA",
+      country_of_origin: "Domestic",
     },
   },
   "pass/bluebird_distilling_2015-09-02.png": {
@@ -170,7 +170,7 @@ const metadata = {
       alcohol_content: "46% Alc/Vol",
       net_contents: "750 ml",
       name_address: "Distilled & bottled by Bluebird Distilling, Phoenixville, PA",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "pass/brook_and_bull_2018-01-10.png": {
@@ -183,13 +183,13 @@ const metadata = {
       alcohol_content: "Alc. 14.5% by vol.",
       net_contents: "750 ml",
       name_address: "Bottled by Brook & Bull, Walla Walla, WA",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
 
   "fail/cantine_mothia_2018-12-06.png": failMetadata(
     "Cantine Mothia",
-    "Expected fail: application brand and net contents are intentionally wrong.",
+    "Expected fail: application brand, net contents, and domestic/imported status are intentionally wrong.",
     {
       brand_name: "Cantina Monteluna",
       beverage_class: "wine",
@@ -197,7 +197,7 @@ const metadata = {
       alcohol_content: "11% by vol.",
       net_contents: "1 L",
       name_address: "Imported by Example Imports, Miami, FL",
-      country_of_origin: "Product of France",
+      country_of_origin: "Domestic",
     },
   ),
   "fail/ca_piadera_2018-05-15.png": failMetadata(
@@ -210,20 +210,20 @@ const metadata = {
       alcohol_content: "14.5% by vol.",
       net_contents: "750 ml",
       name_address: "Bottled by Az. Ag. Ca Piadera S.S., Tarzo (TV), Italy",
-      country_of_origin: "Product of Italy",
+      country_of_origin: "Imported",
     },
   ),
   "fail/cold_spring_brewery_2019-12-20.png": failMetadata(
     "Cold Spring Brewery",
-    "Expected fail: application values intentionally describe a different product.",
+    "Expected fail: domestic malt label is submitted as Imported while alcohol content is federally optional.",
     {
-      brand_name: "Cold Spring Vodka",
-      beverage_class: "spirits",
-      class_type_designation: "Vodka",
-      alcohol_content: "40% alc/vol",
+      brand_name: "Cold Spring Brewery",
+      beverage_class: "malt",
+      class_type_designation: "Malt Beverage",
+      alcohol_content: "",
       net_contents: "750 ml",
-      name_address: "Distilled by Example Distilling, Austin, TX",
-      country_of_origin: "Domestic product",
+      name_address: "Brewed by Cold Spring Brewery, Cold Spring, MN",
+      country_of_origin: "Imported",
     },
   ),
   "fail/duck_walk_vineyards_2014-10-15_14275001000239.png": failMetadata(
@@ -236,7 +236,7 @@ const metadata = {
       alcohol_content: "14.5% by vol.",
       net_contents: "375 ml",
       name_address: "Produced and bottled by Duck Walk Vineyards, Water Mill, NY",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   ),
   "fail/duck_walk_vineyards_2015-05-14.png": failMetadata(
@@ -249,7 +249,7 @@ const metadata = {
       alcohol_content: "12.5% alc/vol",
       net_contents: "750 ml",
       name_address: "Produced and bottled by Duck Walk Vineyards, Water Mill, NY",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   ),
   "fail/duck_walk_vineyards_2015-05-14_15113001000558.png": failMetadata(
@@ -262,12 +262,12 @@ const metadata = {
       alcohol_content: "13.0% alc/vol",
       net_contents: "750 ml",
       name_address: "Produced and bottled by Duck Walk Vineyards, Water Mill, NY",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   ),
   "fail/etim_l_esparver_2015-03-26.png": failMetadata(
     "Etim L'Esparver",
-    "Expected fail: application origin and alcohol content are intentionally wrong.",
+    "Expected fail: imported label has missing application origin status and wrong alcohol content.",
     {
       brand_name: "Etim L'Esparver",
       beverage_class: "wine",
@@ -275,7 +275,7 @@ const metadata = {
       alcohol_content: "11.0% alc/vol",
       net_contents: "750 ml",
       name_address: "Imported by Opici Imports Co., Glen Rock, NJ",
-      country_of_origin: "Product of Italy",
+      country_of_origin: "",
     },
   ),
   "fail/gekkeikan_2013-01-04.png": failMetadata(
@@ -289,20 +289,20 @@ const metadata = {
       net_contents: "720 ml",
       name_address:
         "Produced by Gekkeikan Sake Company, Ltd.; Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY",
-      country_of_origin: "Product of Korea",
+      country_of_origin: "Domestic",
     },
   ),
   "fail/good_people_brewing_company_2016-08-12.png": failMetadata(
     "Good People Brewing Company",
-    "Expected fail: application values intentionally describe a wine instead of ale.",
+    "Expected fail: malt label uses optional blank ABV, but the application says Imported for a domestic label.",
     {
       brand_name: "Good People Brewing Company",
-      beverage_class: "wine",
-      class_type_designation: "Cabernet Sauvignon",
-      alcohol_content: "13.5% alc/vol",
-      net_contents: "750 ml",
+      beverage_class: "malt",
+      class_type_designation: "Ale",
+      alcohol_content: "",
+      net_contents: "12 fl oz",
       name_address: "Bottled by Good People Brewing Company, Birmingham, AL",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Imported",
     },
   ),
 
@@ -317,7 +317,7 @@ const metadata = {
       net_contents: "750 ml",
       name_address:
         "Vinted and bottled by Blue Ridge Winery, LLC, 239 Blue Ridge Road, Saylorsburg, PA 18353",
-      country_of_origin: "Product of USA",
+      country_of_origin: "Domestic",
     },
   },
   "fail/boones_mill_2017-11-24_titlecase_warning.png": {
@@ -330,7 +330,7 @@ const metadata = {
       alcohol_content: "50% Alc/Vol",
       net_contents: "375 ml",
       name_address: "Bottled by Franklin County Distilleries, Franklin County, Virginia 24176",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "fail/cantine_mothia_2018-11-15_warning_covered.png": {
@@ -344,7 +344,7 @@ const metadata = {
       net_contents: "Net contents 750 ml",
       name_address:
         "Product and bottled by Cantine Mothia S.r.l., Marsala (Italia); Imported by Buta Distributors Inc., Boca Raton (FL)",
-      country_of_origin: "Product of Italy",
+      country_of_origin: "Imported",
     },
   },
   "fail/chaglasian_winery_and_vineyards_2019-05-14_19120001000487_warning_removed.png": {
@@ -358,7 +358,7 @@ const metadata = {
       net_contents: "Net cont. 750 ml",
       name_address:
         "Imported by Justabout Winery LLC, Venetia, PA, USA; Estate grown and bottled by Chaglasian Winery & Vineyards, San Rafael, Mendoza",
-      country_of_origin: "Product of Argentina",
+      country_of_origin: "Imported",
     },
   },
   "fail/cleo_2019-04-17_lowercase_warning.png": {
@@ -371,7 +371,7 @@ const metadata = {
       alcohol_content: "40% Alc/Vol",
       net_contents: "750 ml",
       name_address: "Distilled and bottled by Black Market Spirits, Santa Barbara, CA",
-      country_of_origin: "Domestic product",
+      country_of_origin: "Domestic",
     },
   },
   "fail/gekkeikan_2014-09-11_mixedcase_warning.png": {
@@ -385,7 +385,7 @@ const metadata = {
       net_contents: "720 ml",
       name_address:
         "Produced by Gekkeikan Sake Company, Ltd.; Imported by Sidney Frank Importing Co., Inc., New Rochelle, NY",
-      country_of_origin: "Product of Japan",
+      country_of_origin: "Imported",
     },
   },
   "fail/karnobatska_2018-08-20_blurry_warning.png": {
@@ -399,7 +399,7 @@ const metadata = {
       net_contents: "1 L",
       name_address:
         "Produced and bottled by SIS Industries OOD, Bulgaria; Imported by Malinka Imports LLC, Palatine, IL 60067",
-      country_of_origin: "Product of Bulgaria",
+      country_of_origin: "Imported",
     },
   },
 };
@@ -483,11 +483,15 @@ function hasRequiredMetadata(entry) {
     values?.brand_name &&
     values?.beverage_class &&
     values?.class_type_designation &&
-    values?.alcohol_content &&
     values?.net_contents &&
     values?.name_address &&
-    values?.country_of_origin
+    hasOwnString(values, "alcohol_content") &&
+    hasOwnString(values, "country_of_origin")
   );
+}
+
+function hasOwnString(values, key) {
+  return Object.hasOwn(values ?? {}, key) && typeof values[key] === "string";
 }
 
 function emptyApplicationValues() {

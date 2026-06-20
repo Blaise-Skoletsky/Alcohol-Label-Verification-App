@@ -52,6 +52,9 @@ class ResultGuardService:
         return field
 
     def _guard_alcohol_content(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if self._is_backend_not_required(field):
+            return field.model_copy(update={"status": "pass"})
+
         if self._has_clear_exception(field):
             reason = field.reason
             if field.status != "pass":
@@ -94,11 +97,32 @@ class ResultGuardService:
         combined = " ".join([application_value, label_value, reason])
         exception_markers = ["not required", "legitimately absent", "exempt"]
         wine_markers = ["table wine", "light wine", "wine designation"]
+        malt_markers = ["malt", "beer"]
+        no_trigger_markers = [
+            "no added nonbeverage",
+            "no nonbeverage",
+            "not federally required",
+            "federally optional",
+        ]
 
-        return (
+        wine_exception = (
             any(marker in application_value for marker in exception_markers)
             and any(marker in label_value for marker in exception_markers)
             and any(marker in combined for marker in wine_markers)
+        )
+        malt_exception = (
+            any(marker in application_value for marker in exception_markers)
+            and any(marker in label_value for marker in exception_markers)
+            and any(marker in combined for marker in malt_markers)
+            and any(marker in combined for marker in no_trigger_markers)
+        )
+        return wine_exception or malt_exception
+
+    def _is_backend_not_required(self, field: VerificationFieldResult) -> bool:
+        return (
+            (field.reason or "").startswith("Backend applicability:")
+            and (field.application_value or "").strip().lower() == "not required"
+            and (field.label_value or "").strip().lower() == "not required"
         )
 
     def _extract_abv(self, value: str | None) -> float | None:

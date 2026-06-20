@@ -1,5 +1,6 @@
 import json
 import time
+from typing import Mapping
 
 import httpx
 
@@ -33,12 +34,13 @@ def parse_chat_completion_response(
     provider_mode: str,
     started: float,
     attempted_models: list[str],
+    deterministic_fields: Mapping[str, dict] | None = None,
 ) -> ProviderResult:
     try:
         body = response.json()
         content = body["choices"][0]["message"]["content"]
         parsed = json.loads(content) if isinstance(content, str) else content
-        fields = _parse_fields(parsed["fields"])
+        fields = _parse_fields(parsed["fields"], deterministic_fields or {})
         duration_ms = int((time.perf_counter() - started) * 1000)
         return ProviderResult(
             status=VerificationStatus(parsed["status"]),
@@ -59,9 +61,9 @@ def parse_chat_completion_response(
         ) from exc
 
 
-def _parse_fields(raw_fields: dict) -> VerificationFields:
+def _parse_fields(raw_fields: dict, deterministic_fields: Mapping[str, dict]) -> VerificationFields:
     def build_field(field_name: str) -> VerificationFieldResult:
-        field = raw_fields[field_name]
+        field = deterministic_fields.get(field_name) or raw_fields[field_name]
         evidence = [_parse_evidence_item(item) for item in field.get("evidence", [])]
         return VerificationFieldResult(
             status=field["status"],
