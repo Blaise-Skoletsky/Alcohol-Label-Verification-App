@@ -2,6 +2,7 @@ import asyncio
 from uuid import uuid4
 
 from app.core.settings import Settings
+from app.models.application import ApplicationValues
 from app.models.batch import (
     BatchCounts,
     BatchCreateResponse,
@@ -21,7 +22,13 @@ class BatchService:
         self._batches: dict[str, BatchState] = {}
         self._lock = asyncio.Lock()
 
-    async def submit(self, uploads: list[ValidatedUpload]) -> BatchCreateResponse:
+    async def submit(
+        self,
+        uploads: list[ValidatedUpload],
+        application_values: list[ApplicationValues] | None = None,
+    ) -> BatchCreateResponse:
+        if application_values is None:
+            application_values = [ApplicationValues() for _ in uploads]
         batch_id = str(uuid4())
         items = [
             BatchItemState(
@@ -41,7 +48,13 @@ class BatchService:
         async with self._lock:
             self._batches[batch_id] = batch
 
-        asyncio.create_task(self._process_batch(batch_id=batch_id, uploads=uploads))
+        asyncio.create_task(
+            self._process_batch(
+                batch_id=batch_id,
+                uploads=uploads,
+                application_values=application_values,
+            )
+        )
         return BatchCreateResponse(
             batch_id=batch.batch_id,
             status=batch.status,
@@ -54,15 +67,23 @@ class BatchService:
             batch = self._batches.get(batch_id)
             return batch.model_copy(deep=True) if batch else None
 
-    async def _process_batch(self, batch_id: str, uploads: list[ValidatedUpload]) -> None:
+    async def _process_batch(
+        self,
+        batch_id: str,
+        uploads: list[ValidatedUpload],
+        application_values: list[ApplicationValues],
+    ) -> None:
         semaphore = asyncio.Semaphore(self._settings.batch_concurrency)
         await self._set_batch_status(batch_id, BatchLifecycleStatus.processing)
 
         async def worker(index: int, upload: ValidatedUpload) -> None:
             item_id = f"{batch_id}:{index + 1}"
+            values = application_values[index] if index < len(application_values) else None
             async with semaphore:
                 await self._set_item_status(batch_id, item_id, VerificationStatus.processing)
-                result = await self._verification_service.verify(upload, item_id)
+                result = await self._verification_service.verify(
+                    upload, item_id, application_values=values
+                )
             await self._set_item_result(batch_id, item_id, result)
 
         await asyncio.gather(*(worker(index, upload) for index, upload in enumerate(uploads)))
@@ -109,8 +130,6 @@ class BatchService:
                 counts.pass_count += 1
             elif item.status == VerificationStatus.fail:
                 counts.fail += 1
-            elif item.status == VerificationStatus.needs_review:
-                counts.needs_review += 1
             elif item.status == VerificationStatus.processing_error:
                 counts.processing_error += 1
         return counts

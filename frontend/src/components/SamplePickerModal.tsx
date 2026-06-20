@@ -26,13 +26,12 @@ function getSampleCategory(sample: SampleEntry): SampleCategory {
 type Props = {
   open: boolean;
   onClose: () => void;
-  onRun: (files: File[]) => void;
+  onLoad: (entries: SampleEntry[]) => void;
 };
 
-export function SamplePickerModal({ open, onClose, onRun }: Props) {
+export function SamplePickerModal({ open, onClose, onLoad }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [isRunning, setIsRunning] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,39 +69,19 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
     }
   }
 
-  async function handleRun() {
-    if (selected.length === 0 || isRunning) return;
-    setIsRunning(true);
-    try {
-      const files = await Promise.all(
-        selected.map(async (id) => {
-          const entry = SAMPLES.find((sample) => sample.id === id);
-          if (!entry) {
-            throw new Error(`Unknown sample label: ${id}`);
-          }
-          const response = await fetch(`/sample_labels/${entry.file}`);
-          if (!response.ok) {
-            throw new Error(`Could not load sample label: ${entry.file}`);
-          }
-          const blob = await response.blob();
-          const filename = entry.file.split("/").pop() ?? entry.file;
-          return new File([blob], filename, { type: blob.type || "image/png" });
-        }),
-      );
-      setSelected([]);
-      onClose();
-      onRun(files);
-    } finally {
-      setIsRunning(false);
-    }
+  function handleLoad() {
+    if (selected.length === 0) return;
+    const entries = selected
+      .map((id) => SAMPLES.find((sample) => sample.id === id))
+      .filter((entry): entry is SampleEntry => Boolean(entry));
+    setSelected([]);
+    onClose();
+    onLoad(entries);
   }
 
   const n = selected.length;
-  const runLabel = isRunning
-    ? "Loading..."
-    : n === 0
-      ? "Run verification"
-      : `Run verification on ${n} label${n === 1 ? "" : "s"}`;
+  const runLabel =
+    n === 0 ? "Select labels" : `Load & verify ${n} label${n === 1 ? "" : "s"}`;
 
   return (
     <div
@@ -121,8 +100,8 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
                 <span className="demo-chip">DEMO</span>
               </div>
               <p className="sample-subtitle">
-                Handpicked labels with their expected result after going through the model. These
-                run exactly like an upload -- no special treatment applied.
+                Handpicked labels that load into the batch with editable application data already
+                filled in. Pick the ones you want.
               </p>
             </div>
             <button type="button" className="sample-close" onClick={onClose} aria-label="Close">
@@ -144,11 +123,7 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              className="sample-select-all-btn"
-              onClick={toggleSelectAll}
-            >
+            <button type="button" className="sample-select-all-btn" onClick={toggleSelectAll}>
               {allVisibleSelected ? "Deselect all" : "Select all"}
             </button>
           </div>
@@ -209,8 +184,8 @@ export function SamplePickerModal({ open, onClose, onRun }: Props) {
             <button
               type="button"
               className="sample-run-btn"
-              disabled={n === 0 || isRunning}
-              onClick={() => void handleRun()}
+              disabled={n === 0}
+              onClick={handleLoad}
             >
               {runLabel}
             </button>

@@ -16,7 +16,6 @@ class BatchCounts(BaseModel):
     processing: int = 0
     pass_count: int = Field(default=0, serialization_alias="pass")
     fail: int = 0
-    needs_review: int = 0
     processing_error: int = 0
 
 

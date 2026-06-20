@@ -11,6 +11,10 @@ router = APIRouter()
 def api_config(settings: Settings = Depends(get_settings)) -> ConfigResponse:
     return ConfigResponse(
         provider_mode=settings.provider_mode,
+        environment=settings.environment,
+        demo_batch_manifest_url=settings.demo_batch_manifest_url
+        if settings.environment.lower() == "production"
+        else None,
         max_upload_mb=round(settings.max_upload_size_bytes / (1024 * 1024), 1),
         max_batch_labels=settings.max_batch_count,
         batch_concurrency=settings.batch_concurrency,

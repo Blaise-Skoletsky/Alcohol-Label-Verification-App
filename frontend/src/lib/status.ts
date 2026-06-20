@@ -1,20 +1,20 @@
 import type { UiStatus } from "../types/verification";
 
 export const STATUS_LABELS: Record<UiStatus, string> = {
+  draft: "Not verified",
   queued: "Queued",
-  processing: "Processing",
+  processing: "Verifying",
   pass: "Pass",
   fail: "Fail",
-  "needs-review": "Needs review",
-  "processing-error": "Processing error",
+  "processing-error": "Error",
 };
 
 export const STATUS_TONES: Record<UiStatus, string> = {
+  draft: "neutral",
   queued: "neutral",
   processing: "working",
   pass: "pass",
   fail: "fail",
-  "needs-review": "review",
   "processing-error": "error",
 };
 
@@ -35,7 +35,7 @@ export function normalizeStatus(rawStatus?: string | null): UiStatus {
     normalized.includes("manual") ||
     normalized === "warning"
   ) {
-    return "needs-review";
+    return "fail";
   }
   if (normalized.includes("error") || normalized.includes("invalid")) {
     return "processing-error";
@@ -56,12 +56,12 @@ export function defaultReasonForStatus(status: UiStatus) {
       return "The application and label values appear to match.";
     case "fail":
       return "The application and label values do not match.";
-    case "needs-review":
-      return "The system could not make a confident decision.";
     case "processing-error":
       return "The system could not complete this check.";
     case "processing":
       return "This check is still running.";
+    case "draft":
+      return "This label has not been verified yet.";
     case "queued":
     default:
       return "This check is waiting to start.";

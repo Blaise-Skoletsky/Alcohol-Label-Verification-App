@@ -1,12 +1,14 @@
+import asyncio
 import json
 import time
 
 import httpx
 from fastapi.testclient import TestClient
 
-from app.core.dependencies import get_batch_service, get_verification_service
+from app.core.dependencies import get_batch_service, get_settings, get_verification_service
 from app.core.settings import Settings
 from app.main import app
+from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
 from app.models.verification import (
     ModelMetadata,
@@ -18,9 +20,14 @@ from app.models.verification import (
 )
 from app.providers.openrouter_provider import OpenRouterVerificationProvider
 from app.providers.local_provider import LocalModelVerificationProvider
-from app.providers.base import ProviderResult
+from app.providers.base import ProviderError, ProviderPromptResult, ProviderResult
+from app.providers.chat_completion_parser import parse_chat_completion_response
+from app.providers.multi_pass_provider import MultiPassVerificationProvider
 from app.services.batch_service import BatchService
-from app.services.result_guard_service import ResultGuardService
+from app.services.result_guard_service import (
+    GOVERNMENT_WARNING_FULL_TEXT,
+    ResultGuardService,
+)
 from app.services.verification_prompt_service import VerificationPromptService
 
 
@@ -51,9 +58,9 @@ def make_fields(
 ) -> VerificationFields:
     fields = {
         "artifact_legibility": make_field(
-            application_value="Application section readable",
+            application_value="N/A - text entry form",
             label_value="Label artwork readable",
-            reason="Both regions are readable.",
+            reason="Label artwork is readable.",
         ),
         "brand_name": make_field(
             application_value="Example Brand",
@@ -86,9 +93,14 @@ def make_fields(
             label_value="No import country statement required",
             reason="Product is clearly domestic.",
         ),
+        "color_additive_disclosure": make_field(
+            application_value="Not Required",
+            label_value="Not Required",
+            reason="Backend applicability: Malt color additive disclosure is not required for this row.",
+        ),
         "government_warning": make_field(
             application_value="Required government warning statement",
-            label_value="GOVERNMENT WARNING: present",
+            label_value=GOVERNMENT_WARNING_FULL_TEXT,
             reason="Government warning present.",
         ),
     }
@@ -98,7 +110,13 @@ def make_fields(
 
 
 class TestVerificationService:
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> VerificationResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: "ApplicationValues | None" = None,
+    ) -> VerificationResult:
+        self.last_application_values = application_values
         evidence = [VerificationEvidence(summary="Test verification service used.")]
         return VerificationResult(
             item_id=item_id,
@@ -121,7 +139,7 @@ class TestVerificationService:
                     ),
                     "government_warning": make_field(
                         application_value="Required warning statement",
-                        label_value="GOVERNMENT WARNING: present",
+                        label_value=GOVERNMENT_WARNING_FULL_TEXT,
                         reason="Test government warning passed.",
                         evidence=evidence,
                     ),
@@ -137,7 +155,12 @@ class TestVerificationService:
 
 
 class ErrorVerificationService:
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> VerificationResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: "ApplicationValues | None" = None,
+    ) -> VerificationResult:
         return VerificationResult(
             item_id=item_id,
             filename=upload.filename,
@@ -149,6 +172,33 @@ class ErrorVerificationService:
                     "message": "The model returned an unreadable response.",
                 }
             ],
+        )
+
+
+class SpecialistRunner:
+    def __init__(self, omit_fields: set[str] | None = None):
+        self.calls: list[tuple[str, tuple[str, ...]]] = []
+        self.omit_fields = omit_fields or set()
+
+    async def run_prompt(self, *, upload, prompt, prompt_name: str) -> ProviderPromptResult:
+        self.calls.append((prompt_name, prompt.requested_fields))
+        source_fields = make_fields()
+        fields = {
+            field_name: getattr(source_fields, field_name)
+            for field_name in prompt.requested_fields
+            if field_name not in self.omit_fields
+        }
+        return ProviderPromptResult(
+            status=VerificationStatus.pass_status,
+            summary=f"{prompt_name} passed.",
+            fields=fields,
+            model=ModelMetadata(
+                provider="test",
+                model=f"test-{prompt_name}",
+                provider_mode="local",
+                duration_ms=10,
+                attempted_models=[f"test-{prompt_name}"],
+            ),
         )
 
 
@@ -173,6 +223,7 @@ def make_test_client() -> TestClient:
 
 def test_config_endpoint_exposes_safe_limits() -> None:
     app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: Settings(provider_mode="local")
     client = TestClient(app)
 
     response = client.get("/api/config")
@@ -180,10 +231,44 @@ def test_config_endpoint_exposes_safe_limits() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["provider_mode"] == "local"
-    assert body["max_batch_labels"] == 400
+    assert body["environment"] == "development"
+    assert body["demo_batch_manifest_url"] is None
+    assert body["max_batch_labels"] == 350
     assert ".png" in body["allowed_file_types"]
     assert ".pdf" not in body["allowed_file_types"]
     assert "openrouter_api_key" not in body
+    app.dependency_overrides.clear()
+
+
+def test_config_endpoint_exposes_demo_manifest_only_in_production() -> None:
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        provider_mode="local",
+        environment="development",
+        demo_batch_manifest_url="https://example.test/manifest.json",
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["environment"] == "development"
+    assert body["demo_batch_manifest_url"] is None
+
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        provider_mode="local",
+        environment="production",
+        demo_batch_manifest_url="https://example.test/manifest.json",
+    )
+
+    response = client.get("/api/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["environment"] == "production"
+    assert body["demo_batch_manifest_url"] == "https://example.test/manifest.json"
+    app.dependency_overrides.clear()
 
 
 def test_settings_accept_comma_separated_cors_origins() -> None:
@@ -275,7 +360,7 @@ def test_batch_submission_and_progress_shape() -> None:
     assert last_body["status"] == "completed"
     assert last_body["total_items"] == 2
     assert set(last_body["counts"]).issuperset(
-        {"queued", "processing", "pass", "fail", "needs_review", "processing_error"}
+        {"queued", "processing", "pass", "fail", "processing_error"}
     )
     assert all("status" in item for item in last_body["items"])
 
@@ -298,7 +383,9 @@ def test_openrouter_payload_sends_real_image_content() -> None:
 
 
 def test_local_provider_payload_sends_image_without_openrouter_plugins() -> None:
-    provider = LocalModelVerificationProvider(Settings(provider_mode="local"))
+    provider = LocalModelVerificationProvider(
+        Settings(provider_mode="local", local_model_name="qwen2.5-vl-7b-instruct")
+    )
     upload = ValidatedUpload(
         filename="sample.png",
         content_type="image/png",
@@ -331,8 +418,8 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
 
     system_text = payload["messages"][0]["content"]
     user_text = payload["messages"][1]["content"][0]["text"]
-    assert system_text.startswith("NON-NEGOTIABLE VISUAL GATE")
-    assert "alcohol label verification assistant" in system_text
+    assert system_text.startswith("You verify TTB-style alcohol label artwork")
+    assert "TTB-style alcohol label artwork" in system_text
     assert "artifact_legibility" in system_text
     assert "brand_name" in system_text
     assert "class_type_designation" in system_text
@@ -341,16 +428,307 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "name_address" in system_text
     assert "country_of_origin" in system_text
     assert "government_warning" in system_text
-    assert "Never return needs_review for government_warning" in system_text
-    assert '"government_warning":        {"status":"pass|fail",' in system_text
-    assert '"application_value":"Required federal government warning"' in system_text
-    assert "Government warning passes only when the label artwork visibly prints the warning heading" in system_text
-    assert "Never invent or fill in government_warning.label_value from regulatory knowledge" in system_text
-    assert user_text == (
-        "Review the attached combined application-and-label artifact using the system rules. "
-        "Use only text visible in the image; do not infer or fill missing label text from the rules."
+    assert "Each field object must be" in system_text
+    assert "Requested fields: artifact_legibility" in system_text
+    assert "application_value='Required federal government warning'" in system_text
+    assert "APPLICATION_VALUES_JSON" in system_text
+    assert "The image is label artwork only" in system_text
+    assert "never extract application values from it" in system_text
+    assert "application_value='N/A - text entry form'" in system_text
+    assert "FIELD 1 - artifact_legibility" in system_text
+    assert "decimal comma = decimal point" in system_text
+    assert "exact federal warning statement word-for-word" in system_text
+    assert "prefix 'GOVERNMENT WARNING:' must be all caps and visibly bold" in system_text
+    assert "missing, changed, reordered, or paraphrased words" in system_text
+    assert "numbering, punctuation, and every required word" in system_text
+    assert "may be sentence case or all caps" in system_text
+    assert "when the words and punctuation are otherwise exact" in system_text
+    assert "lowercase/title-case/mixed-case prefix" in system_text
+    assert "transcribe the full visible warning statement" in system_text
+    assert "preserve the prefix letter case exactly as printed" in system_text
+    assert "never rewrite a lowercase, title-case, or mixed-case prefix into all caps" in system_text
+    assert "lacks a visibly" in system_text
+    assert "inferred from" in system_text
+    assert "regulatory knowledge" in system_text
+    assert "Review the attached label artwork image using the system rules." in user_text
+    assert "APPLICATION_VALUES_JSON" in user_text
+    assert '"brand_name": "{{brand_name}}"' in user_text
+    assert '"beverage_class": "{{beverage_class}}"' in user_text
+    assert "government_warning" not in user_text.split("APPLICATION_VALUES_JSON:")[1]
+
+
+def test_verification_prompt_accepts_application_values() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Stone's Throw",
+            "beverage_class": "wine",
+            "class_type_designation": "Wine",
+            "alcohol_content": "13.5% ABV",
+            "net_contents": "750 mL",
+            "name_address": "Example Producer, Napa, CA",
+            "country_of_origin": "Domestic",
+        }
     )
-    assert "government_warning" not in user_text
+
+    assert "\"brand_name\": \"Stone's Throw\"" in prompt.user_instruction
+    assert '"beverage_class": "wine"' in prompt.user_instruction
+    assert '"class_type_designation": "Wine"' in prompt.user_instruction
+    assert '"alcohol_content": "13.5% ABV"' in prompt.user_instruction
+    assert "The image is label artwork only" in prompt.system_instruction
+    assert "never extract application values from it" in prompt.system_instruction
+    assert "application_value='N/A - text entry form'" in prompt.system_instruction
+
+
+def test_prompt_skips_table_wine_alcohol_content_when_not_required() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Example",
+            "beverage_class": "wine",
+            "class_type_designation": "Table Wine",
+            "alcohol_content": "",
+            "net_contents": "750 mL",
+            "name_address": "Example Producer, Napa, CA",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "alcohol_content" not in prompt.requested_fields
+    assert "FIELD 4 - alcohol_content" not in prompt.system_instruction
+    assert "Requested fields:" in prompt.system_instruction
+    assert "alcohol_content" not in prompt.system_instruction.split("Requested fields: ")[1]
+    assert prompt.deterministic_fields["alcohol_content"]["status"] == "pass"
+    assert "Backend applicability" in prompt.deterministic_fields["alcohol_content"]["reason"]
+
+
+def test_prompt_allows_specific_wine_designation_for_table_wine_class_type() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "3 Steves Winery",
+            "beverage_class": "wine",
+            "class_type_designation": "Table Wine",
+            "alcohol_content": "",
+            "net_contents": "750 mL",
+            "name_address": "Bottled By 3 Steves Winery, Livermore, CA",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "If" in prompt.system_instruction
+    assert "application says Table Wine or Light Wine" in prompt.system_instruction
+    assert "Chardonnay" in prompt.system_instruction
+    assert "no conflicting class appears" in prompt.system_instruction
+
+
+def test_prompt_allows_class_type_modifiers_and_obvious_spelling_variants() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Blue Ridge",
+            "beverage_class": "wine",
+            "class_type_designation": "White grape wine with artificial flavor",
+            "alcohol_content": "Alc. 11% by vol.",
+            "net_contents": "750 mL",
+            "name_address": "Vinted and bottled by Blue Ridge Winery, LLC",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "Harmless descriptive modifiers" in prompt.system_instruction
+    assert "off dry" in prompt.system_instruction
+    assert "OCR/label spelling variants" in prompt.system_instruction
+    assert "artifical matching artificial" in prompt.system_instruction
+
+
+def test_prompt_forbids_net_contents_inference() -> None:
+    prompt = VerificationPromptService().build_prompt()
+
+    assert "Do not infer common bottle sizes" in prompt.system_instruction
+    assert "barcode" in prompt.system_instruction
+    assert "unless the same quantity/unit is visible" in prompt.system_instruction
+
+
+def test_prompt_requires_word_for_word_government_warning() -> None:
+    prompt = VerificationPromptService().build_prompt()
+
+    assert "exact federal warning statement word-for-word" in prompt.system_instruction
+    assert "missing any required word" in prompt.system_instruction
+    assert "changed/reordered/paraphrased wording" in prompt.system_instruction
+    assert "visibly bold" in prompt.system_instruction
+    assert "may be sentence case or all caps" in prompt.system_instruction
+    assert "when the words and punctuation are otherwise exact" in prompt.system_instruction
+    assert "lowercase/title-case/mixed-case prefix" in prompt.system_instruction
+    assert "return the full visible warning statement when readable" in prompt.system_instruction
+    assert "only the heading" in prompt.system_instruction
+    assert "non-exact heading" in prompt.system_instruction
+    assert "fail the" in prompt.system_instruction
+
+
+def test_prompt_requires_distilled_spirits_alcohol_content() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "beverage_class": "spirits",
+            "class_type_designation": "Vodka",
+            "alcohol_content": "",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "alcohol_content" in prompt.requested_fields
+    assert "Alcohol content is required or was submitted for comparison." in prompt.system_instruction
+    assert "distilled spirits" in prompt.system_instruction
+
+
+def test_prompt_skips_malt_alcohol_content_without_added_nonbeverage_trigger() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "beverage_class": "malt",
+            "class_type_designation": "Ale",
+            "alcohol_content": "",
+            "country_of_origin": "Domestic",
+            "malt_added_nonbeverage_alcohol": False,
+        }
+    )
+
+    assert "alcohol_content" not in prompt.requested_fields
+    assert prompt.deterministic_fields["alcohol_content"]["status"] == "pass"
+
+
+def test_prompt_requires_malt_alcohol_content_with_added_nonbeverage_trigger() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "beverage_class": "malt",
+            "class_type_designation": "Ale",
+            "alcohol_content": "",
+            "country_of_origin": "Domestic",
+            "malt_added_nonbeverage_alcohol": True,
+        }
+    )
+
+    assert "alcohol_content" in prompt.requested_fields
+    assert "Alcohol content is required" in prompt.system_instruction
+
+
+def test_prompt_checks_malt_color_additive_only_when_applicable() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "beverage_class": "malt",
+            "class_type_designation": "Ale",
+            "country_of_origin": "Domestic",
+            "malt_color_additive_applicable": True,
+        }
+    )
+
+    assert "color_additive_disclosure" in prompt.requested_fields
+    assert "FIELD 8 - color_additive_disclosure" in prompt.system_instruction
+
+
+def test_prompt_targets_domestic_country_of_origin_check() -> None:
+    prompt = VerificationPromptService().build_prompt({"country_of_origin": "Domestic"})
+
+    assert "Application says Domestic" in prompt.system_instruction
+    assert "Product of" in prompt.system_instruction
+    assert "does not show an imported origin" in prompt.system_instruction
+    assert "No imported origin statement visible" in prompt.system_instruction
+    assert "do not use N/A" in prompt.system_instruction
+
+
+def test_prompt_targets_country_name_origin_check() -> None:
+    prompt = VerificationPromptService().build_prompt({"country_of_origin": "Chile"})
+
+    assert "Application provides a country name" in prompt.system_instruction
+    assert "country conflicts" in prompt.system_instruction
+    assert "Application country for this row: Chile" in prompt.system_instruction
+
+
+def test_verify_forwards_application_values_to_service() -> None:
+    app.dependency_overrides.clear()
+    service = TestVerificationService()
+    app.dependency_overrides[get_verification_service] = lambda: service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/verify",
+        files={"file": ("sample.png", PNG_BYTES, "image/png")},
+        data={
+            "brand_name": "Coyam",
+            "beverage_class": "wine",
+            "class_type_designation": "Red Wine",
+            "alcohol_content": "14.5%",
+            "net_contents": "750 mL",
+            "name_address": "Banfi Products Corp",
+            "country_of_origin": "Chile",
+            "malt_added_nonbeverage_alcohol": "false",
+            "malt_color_additive_applicable": "false",
+        },
+    )
+
+    assert response.status_code == 200
+    values = service.last_application_values
+    assert isinstance(values, ApplicationValues)
+    assert values.brand_name == "Coyam"
+    assert values.beverage_class == "wine"
+    assert values.net_contents == "750 mL"
+    assert values.country_of_origin == "Chile"
+    assert values.malt_added_nonbeverage_alcohol is False
+    assert values.malt_color_additive_applicable is False
+    app.dependency_overrides.clear()
+
+
+def test_provider_payload_includes_application_values() -> None:
+    provider = OpenRouterVerificationProvider(
+        Settings(openrouter_api_key="test-key"),
+        prompt_service=VerificationPromptService(),
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    payload = provider._build_payload(
+        model="google/gemini-3.5-flash",
+        upload=upload,
+        application_values=ApplicationValues(brand_name="Coyam", net_contents="750 mL"),
+    )
+
+    user_text = payload["messages"][1]["content"][0]["text"]
+    assert '"brand_name": "Coyam"' in user_text
+    assert '"net_contents": "750 mL"' in user_text
+
+
+def test_batch_accepts_aligned_rows() -> None:
+    client = make_test_client()
+
+    response = client.post(
+        "/api/batches",
+        files=[
+            ("files", ("coyam.png", PNG_BYTES, "image/png")),
+            ("files", ("casamigos.png", PNG_BYTES, "image/png")),
+        ],
+        data={
+            "rows": json.dumps(
+                [
+                    {"filename": "coyam.png", "brand_name": "Coyam", "beverage_class": "wine"},
+                    {"filename": "casamigos.png", "brand_name": "Casamigos", "beverage_class": "spirits"},
+                ]
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()["items"]) == 2
+
+
+def test_batch_rejects_misaligned_rows() -> None:
+    client = make_test_client()
+
+    response = client.post(
+        "/api/batches",
+        files=[("files", ("coyam.png", PNG_BYTES, "image/png"))],
+        data={"rows": json.dumps([{"brand_name": "Coyam"}, {"brand_name": "Extra"}])},
+    )
+
+    assert response.status_code == 400
 
 
 def test_openrouter_parser_accepts_string_evidence_items() -> None:
@@ -422,10 +800,18 @@ def test_openrouter_parser_accepts_string_evidence_items() -> None:
                                         "reason": "Domestic product.",
                                         "evidence": [],
                                     },
+                                    "color_additive_disclosure": {
+                                        "status": "pass",
+                                        "application_value": "Not Required",
+                                        "label_value": "Not Required",
+                                        "confidence": 1.0,
+                                        "reason": "Backend applicability: Malt color additive disclosure is not required for this row.",
+                                        "evidence": [],
+                                    },
                                     "government_warning": {
                                         "status": "pass",
-                                        "application_value": "GOVERNMENT WARNING:",
-                                        "label_value": "GOVERNMENT WARNING:",
+                                        "application_value": "Required federal government warning",
+                                        "label_value": GOVERNMENT_WARNING_FULL_TEXT,
                                         "confidence": 1.0,
                                         "reason": "Present.",
                                         "evidence": [],
@@ -449,7 +835,123 @@ def test_openrouter_parser_accepts_string_evidence_items() -> None:
     assert result.fields.brand_name.evidence[0].summary == "Brand appears on label."
 
 
-def test_result_guard_does_not_allow_non_abv_text_to_pass_alcohol_content() -> None:
+def test_parser_fills_backend_deterministic_fields() -> None:
+    raw_fields = make_fields().model_dump()
+    raw_fields.pop("alcohol_content")
+    deterministic_fields = {
+        "alcohol_content": {
+            "status": "pass",
+            "application_value": "Not Required",
+            "label_value": "Not Required",
+            "reason": (
+                "Backend applicability: Alcohol content is not required for this "
+                "table/light wine designation."
+            ),
+            "evidence": [],
+        }
+    }
+    response = httpx.Response(
+        status_code=200,
+        json={
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "status": "pass",
+                                "summary": "Requested fields passed.",
+                                "fields": raw_fields,
+                            }
+                        )
+                    }
+                }
+            ]
+        },
+    )
+
+    result = parse_chat_completion_response(
+        response=response,
+        model="test-model",
+        provider_name="test",
+        provider_mode="local",
+        started=time.perf_counter(),
+        attempted_models=["test-model"],
+        deterministic_fields=deterministic_fields,
+    )
+
+    assert result.fields.alcohol_content.status == "pass"
+    assert result.fields.alcohol_content.application_value == "Not Required"
+    assert "Backend applicability" in result.fields.alcohol_content.reason
+
+
+def test_multi_pass_provider_runs_three_specialists_and_merges_fields() -> None:
+    runner = SpecialistRunner()
+    provider = MultiPassVerificationProvider(
+        runner=runner,
+        prompt_service=VerificationPromptService(),
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    result = asyncio.run(
+        provider.verify(
+            upload=upload,
+            item_id="sample",
+            application_values=ApplicationValues(
+                beverage_class="spirits",
+                class_type_designation="Gin",
+                alcohol_content="40% Alc/Vol",
+                country_of_origin="Domestic",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.artifact_legibility.status == "pass"
+    assert result.fields.government_warning.label_value == GOVERNMENT_WARNING_FULL_TEXT
+    assert result.fields.color_additive_disclosure.application_value == "Not Required"
+    assert result.model.model.startswith("multi-pass(")
+    assert [name for name, _fields in runner.calls] == [
+        "warning_legibility",
+        "product_fields",
+        "origin_fields",
+    ]
+    assert runner.calls[0][1] == ("artifact_legibility", "government_warning")
+    assert runner.calls[1][1] == (
+        "brand_name",
+        "class_type_designation",
+        "alcohol_content",
+        "net_contents",
+    )
+    assert runner.calls[2][1] == ("name_address", "country_of_origin")
+
+
+def test_multi_pass_provider_fails_when_specialist_omits_required_field() -> None:
+    runner = SpecialistRunner(omit_fields={"government_warning"})
+    provider = MultiPassVerificationProvider(
+        runner=runner,
+        prompt_service=VerificationPromptService(),
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    try:
+        asyncio.run(provider.verify(upload=upload, item_id="sample"))
+    except ProviderError as exc:
+        assert "government_warning" in exc.message
+    else:
+        raise AssertionError("Expected missing specialist field to raise ProviderError.")
+
+
+def test_result_guard_fails_non_abv_text_for_alcohol_content() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(
             status=VerificationStatus.pass_status,
@@ -469,20 +971,20 @@ def test_result_guard_does_not_allow_non_abv_text_to_pass_alcohol_content() -> N
         )
     )
 
-    assert result.status == VerificationStatus.needs_review
-    assert result.summary == "Manual review needed: alcohol content."
-    assert result.fields.alcohol_content.status == "needs_review"
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: alcohol content."
+    assert result.fields.alcohol_content.status == "fail"
     assert "alcohol-content" in result.fields.alcohol_content.reason
 
 
 def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(
-            status=VerificationStatus.needs_review,
-            summary="Model requested review.",
+            status=VerificationStatus.fail,
+            summary="Model failed the field.",
             fields=make_fields(
                 alcohol_content=make_field(
-                    status="needs_review",
+                    status="fail",
                     application_value="Not required for table wine designation",
                     label_value="Not required for table wine designation",
                     reason="Alcohol content could not be confidently extracted as an alcohol-content value.",
@@ -501,3 +1003,261 @@ def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
     assert result.fields.alcohol_content.reason == (
         "Alcohol content is not required for this table/light wine designation."
     )
+
+
+def test_result_guard_passes_optional_malt_omission_without_trigger() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model passed optional malt omission.",
+            fields=make_fields(
+                alcohol_content=make_field(
+                    application_value="Not required for malt beverage",
+                    label_value="Not required for malt beverage",
+                    reason=(
+                        "Malt beverage alcohol content is federally optional; "
+                        "no added nonbeverage alcohol trigger is visible."
+                    ),
+                )
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.alcohol_content.status == "pass"
+
+
+def test_result_guard_treats_decimal_comma_as_matching_abv() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.fail,
+            summary="Model failed the field.",
+            fields=make_fields(
+                alcohol_content=make_field(
+                    status="fail",
+                    application_value="Alc. 14.5% by vol.",
+                    label_value="ALC. 14,5% BY VOL.",
+                    reason="Application alcohol content and label alcohol content do not match exactly.",
+                )
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.alcohol_content.status == "pass"
+
+
+def test_result_guard_fails_mixed_case_government_warning_prefix() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "government_warning": make_field(
+                        application_value="Required federal government warning",
+                        label_value=GOVERNMENT_WARNING_FULL_TEXT.replace(
+                            "GOVERNMENT WARNING:", "Government Warning:"
+                        ),
+                        reason="Model incorrectly accepted title-case prefix.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: government warning."
+    assert result.fields.government_warning.status == "fail"
+    assert "prefix 'GOVERNMENT WARNING:' is visible in all caps" in (
+        result.fields.government_warning.reason
+    )
+
+
+def test_result_guard_fails_partial_government_warning_text() -> None:
+    partial_warning = (
+        "GOVERNMENT WARNING: (1) According to the Surgeon General, women should "
+        "not drink alcoholic beverages during pregnancy. (2) Consumption of alcoholic "
+        "beverages impairs your ability to drive a car or operate machinery."
+    )
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "government_warning": make_field(
+                        application_value="Required federal government warning",
+                        label_value=partial_warning,
+                        reason="Model incorrectly accepted partial warning.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: government warning."
+    assert result.fields.government_warning.status == "fail"
+    assert "because" in result.fields.government_warning.reason
+
+
+def test_result_guard_allows_warning_spacing_ocr_variants() -> None:
+    compact_warning = (
+        "GOVERNMENT WARNING:(1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD "
+        "NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK "
+        "OF BIRTH DEFECTS.(2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR "
+        "ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    )
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "government_warning": make_field(
+                        application_value="Required federal government warning",
+                        label_value=compact_warning,
+                        reason="Warning text is present.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.government_warning.status == "pass"
+
+
+def test_result_guard_reports_first_warning_word_mismatch() -> None:
+    altered_warning = GOVERNMENT_WARNING_FULL_TEXT.replace("Surgeon", "Attorney")
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "government_warning": make_field(
+                        application_value="Required federal government warning",
+                        label_value=altered_warning,
+                        reason="Model incorrectly accepted changed warning.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert "surgeon" in result.fields.government_warning.reason
+    assert "attorney" in result.fields.government_warning.reason
+
+
+def test_result_guard_allows_domestic_origin_without_origin_statement() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "country_of_origin": make_field(
+                        application_value="Domestic",
+                        label_value="N/A",
+                        reason="No imported origin statement is visible on this domestic label.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.country_of_origin.status == "pass"
+    assert result.fields.country_of_origin.label_value == "No imported origin statement visible"
+
+
+def test_result_guard_allows_artifact_legibility_application_na() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "artifact_legibility": make_field(
+                        application_value="N/A - text entry form",
+                        label_value="Label artwork readable",
+                        reason="Label artwork is readable.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.artifact_legibility.status == "pass"
+
+
+def test_result_guard_fails_artifact_legibility_when_label_unreadable() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "artifact_legibility": make_field(
+                        application_value="N/A - text entry form",
+                        label_value="Unreadable",
+                        reason="Model incorrectly accepted unreadable label artwork.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: artifact legibility."
+    assert result.fields.artifact_legibility.status == "fail"
+    assert "label image is readable" in result.fields.artifact_legibility.reason

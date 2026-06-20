@@ -8,6 +8,21 @@ export class ApiError extends Error {
   }
 }
 
+// The seven reviewer-entered application values sent alongside the label image.
+export type ApplicationValuePayload = {
+  brand_name?: string;
+  beverage_class?: "spirits" | "wine" | "malt";
+  class_type_designation?: string;
+  alcohol_content?: string;
+  net_contents?: string;
+  name_address?: string;
+  country_of_origin?: string;
+  malt_added_nonbeverage_alcohol?: boolean;
+  malt_color_additive_applicable?: boolean;
+};
+
+export type BatchRowPayload = ApplicationValuePayload & { filename: string };
+
 export async function getConfig() {
   const response = await fetch("/api/config");
   if (!response.ok) {
@@ -16,9 +31,20 @@ export async function getConfig() {
   return response.json() as Promise<unknown>;
 }
 
-export async function verifySingle(file: File) {
+function appendValues(formData: FormData, values: ApplicationValuePayload) {
+  for (const [key, value] of Object.entries(values)) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      formData.append(key, value);
+    } else if (typeof value === "boolean") {
+      formData.append(key, value ? "true" : "false");
+    }
+  }
+}
+
+export async function verifyRow(file: File, values: ApplicationValuePayload = {}) {
   const formData = new FormData();
   formData.append("file", file);
+  appendValues(formData, values);
 
   const response = await fetch("/api/verify", {
     method: "POST",
@@ -26,17 +52,18 @@ export async function verifySingle(file: File) {
   });
 
   if (!response.ok) {
-    throw await buildApiError(response, "The review service could not process this file.");
+    throw await buildApiError(response, "The review service could not process this label.");
   }
 
   return response.json() as Promise<unknown>;
 }
 
-export async function submitBatch(files: File[]) {
+export async function submitBatch(files: File[], rows: BatchRowPayload[]) {
   const formData = new FormData();
   for (const file of files) {
     formData.append("files", file);
   }
+  formData.append("rows", JSON.stringify(rows));
 
   const response = await fetch("/api/batches", {
     method: "POST",

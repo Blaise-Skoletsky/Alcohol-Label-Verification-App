@@ -11,7 +11,6 @@ class VerificationStatus(str, Enum):
     processing = "processing"
     pass_status = "pass"
     fail = "fail"
-    needs_review = "needs_review"
     processing_error = "processing_error"
 
 
@@ -21,7 +20,7 @@ class VerificationEvidence(BaseModel):
 
 
 class VerificationFieldResult(BaseModel):
-    status: Literal["pass", "fail", "needs_review"]
+    status: Literal["pass", "fail"]
     application_value: str | None = None
     label_value: str | None = None
     reason: str
@@ -36,6 +35,7 @@ class VerificationFields(BaseModel):
     net_contents: VerificationFieldResult
     name_address: VerificationFieldResult
     country_of_origin: VerificationFieldResult
+    color_additive_disclosure: VerificationFieldResult
     government_warning: VerificationFieldResult
 
 

@@ -6,7 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.controllers import batch_router, config_router, health_router, verification_router
+from app.controllers import (
+    batch_router,
+    config_router,
+    health_router,
+    verification_router,
+)
 from app.core.settings import get_settings
 
 

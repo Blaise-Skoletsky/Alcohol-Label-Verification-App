@@ -12,14 +12,14 @@
     padding: 18px;
   }
 
-  .slideover-content {
+  .slideover-side {
     width: 100%;
     flex: 1 1 auto;
   }
 }
 
 @media (max-width: 880px) {
-  .console {
+  .app-shell {
     flex-direction: column;
   }
 

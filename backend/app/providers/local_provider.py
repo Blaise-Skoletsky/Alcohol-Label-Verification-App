@@ -4,10 +4,18 @@ from base64 import b64encode
 import httpx
 
 from app.core.settings import Settings
+from app.models.application import ApplicationValues
 from app.models.uploads import ValidatedUpload
-from app.providers.base import ProviderError, ProviderResult
-from app.providers.chat_completion_parser import parse_chat_completion_response
-from app.services.verification_prompt_service import VerificationPromptService
+from app.providers.base import ProviderError, ProviderPromptResult, ProviderResult
+from app.providers.chat_completion_parser import (
+    parse_chat_completion_prompt_response,
+    parse_chat_completion_response,
+)
+from app.services.verification_prompt_service import (
+    SpecialistVerificationPrompt,
+    VerificationPrompt,
+    VerificationPromptService,
+)
 
 
 class LocalModelVerificationProvider:
@@ -22,9 +30,15 @@ class LocalModelVerificationProvider:
         self._provider_url = settings.local_model_base_url
         self._model = settings.local_model_name
 
-    async def verify(self, upload: ValidatedUpload, item_id: str) -> ProviderResult:
+    async def verify(
+        self,
+        upload: ValidatedUpload,
+        item_id: str,
+        application_values: ApplicationValues | None = None,
+    ) -> ProviderResult:
         started = time.perf_counter()
-        payload = self._build_payload(upload=upload)
+        prompt = self._build_prompt(application_values)
+        payload = self._build_payload(upload=upload, prompt=prompt)
         headers = {"Content-Type": "application/json"}
 
         try:
@@ -38,6 +52,7 @@ class LocalModelVerificationProvider:
                     provider_mode=self._settings.provider_mode,
                     started=started,
                     attempted_models=[self._model],
+                    deterministic_fields=prompt.deterministic_fields,
                 )
         except httpx.TimeoutException as exc:
             raise ProviderError(
@@ -52,8 +67,50 @@ class LocalModelVerificationProvider:
                 "We could not reach the local model. Please start the local model server and try again."
             ) from exc
 
-    def _build_payload(self, upload: ValidatedUpload) -> dict:
-        prompt = self._prompt_service.build_prompt()
+    async def run_prompt(
+        self,
+        *,
+        upload: ValidatedUpload,
+        prompt: VerificationPrompt | SpecialistVerificationPrompt,
+        prompt_name: str,
+    ) -> ProviderPromptResult:
+        started = time.perf_counter()
+        payload = self._build_payload(upload=upload, prompt=prompt)
+        headers = {"Content-Type": "application/json"}
+
+        try:
+            async with httpx.AsyncClient(timeout=self._settings.provider_timeout_seconds) as client:
+                response = await client.post(self._provider_url, headers=headers, json=payload)
+                response.raise_for_status()
+                return parse_chat_completion_prompt_response(
+                    response=response,
+                    model=self._model,
+                    provider_name=self._provider_name,
+                    provider_mode=self._settings.provider_mode,
+                    started=started,
+                    attempted_models=[self._model],
+                    requested_fields=prompt.requested_fields,
+                )
+        except httpx.TimeoutException as exc:
+            raise ProviderError(
+                f"The local model took too long to answer the {prompt_name} check."
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise ProviderError(
+                "The local model could not review this file. Please check that the local model server supports image inputs."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderError(
+                "We could not reach the local model. Please start the local model server and try again."
+            ) from exc
+
+    def _build_payload(
+        self,
+        upload: ValidatedUpload,
+        application_values: ApplicationValues | None = None,
+        prompt: VerificationPrompt | SpecialistVerificationPrompt | None = None,
+    ) -> dict:
+        prompt = prompt or self._build_prompt(application_values)
         return {
             "model": self._model,
             "messages": [
@@ -74,6 +131,11 @@ class LocalModelVerificationProvider:
             "max_tokens": 1800,
             "stream": False,
         }
+
+    def _build_prompt(self, application_values: ApplicationValues | None) -> VerificationPrompt:
+        return self._prompt_service.build_prompt(
+            application_values.to_prompt_mapping() if application_values else None
+        )
 
     def _build_image_part(self, upload: ValidatedUpload) -> dict:
         if upload.extension not in {".png", ".jpg", ".jpeg"}:

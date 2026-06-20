@@ -2,6 +2,40 @@
 
 Prototype scaffold for an AI-powered alcohol label verification app.
 
+The primary workflow is a structured verification item: the user uploads one
+label-artwork image and enters the application data as text fields. The backend
+passes the label image plus those text values into the configured vision model and
+compares what is printed on the label against the submitted values. A verification
+request must include both the label photo and the required text fields.
+
+## Current Verification Contract
+
+Each verification item has one uploaded PNG or JPG label image plus hard text
+inputs for:
+
+- Brand name
+- Class/type designation
+- Alcohol content, when required for the beverage class
+- Net contents
+- Name and address of bottler/producer
+- Country of origin for imports
+
+The Government Health Warning Statement is not compared to a user-entered value.
+It is a label-only compliance check. The label must show the exact federal warning
+statement, the visible prefix `GOVERNMENT WARNING:` must be all caps and visibly
+bold, and approximate wording, title-case headings, missing text, or unreadable
+warning text must fail.
+
+Each verification currently fans out into three parallel model calls for one
+image: warning/legibility, product fields, and origin fields. The backend then
+merges those specialist results into the existing response shape and applies the
+result guard before returning the final pass/fail status.
+
+Most other fields require compliance judgment rather than blind string matching.
+For example, capitalization and punctuation-only differences in a brand name can
+pass when the wording is substantively the same. The government warning is the
+exception: it has no tolerance for wording or capitalization changes.
+
 ## Stack
 
 - Backend: FastAPI
@@ -50,6 +84,8 @@ Use `PROVIDER_MODE=openrouter` with `OPENROUTER_API_KEY` to call OpenRouter from
 
 See [docs/azure-app-service.md](docs/azure-app-service.md) for the Azure App Service setup and GitHub Actions deployment flow.
 
+The production Azure deployment can expose a hosted sample batch upload. When `ENVIRONMENT=production` and `DEMO_BATCH_MANIFEST_URL` points at the Azure Blob manifest, the sidebar shows `Load sample batch` and pre-fills the batch spreadsheet from the hosted CSV and image blobs. This button is intentionally hidden outside production.
+
 ## Assumptions
 
 See [docs/assumptions.md](docs/assumptions.md) for the rollout assumptions.
@@ -65,8 +101,8 @@ Key assumptions:
 
 ## Storage Posture
 
-The current scaffold is stateless. It does not store uploaded label artwork or application data on the server or in cloud storage. Future recent-history behavior should be browser-local unless server-side retention is explicitly added.
+The current scaffold is stateless. It does not store uploaded label artwork or submitted application text on the server or in cloud storage. Future recent-history behavior should be browser-local unless server-side retention is explicitly added.
 
 ## Future Production Improvements
 
-- Consider direct COLA imports or structured metadata ingestion in addition to the current single combined application+label upload. This is not in scope for the prototype, but it may be useful if the app is productionalized.
+- Consider direct COLA imports or structured metadata ingestion in addition to manual application-data entry. This is not in scope for the immediate prototype, but it may be useful if the app is productionalized.

@@ -8,17 +8,30 @@ from app.models.verification import (
 from app.providers.base import ProviderResult
 
 
+GOVERNMENT_WARNING_PREFIX = "GOVERNMENT WARNING:"
+GOVERNMENT_WARNING_BODY = (
+    "(1) According to the Surgeon General, women should not drink alcoholic beverages "
+    "during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic "
+    "beverages impairs your ability to drive a car or operate machinery, and may cause "
+    "health problems."
+)
+GOVERNMENT_WARNING_FULL_TEXT = f"{GOVERNMENT_WARNING_PREFIX} {GOVERNMENT_WARNING_BODY}"
+
+
 class ResultGuardService:
     def enforce(self, result: ProviderResult) -> ProviderResult:
         guarded_fields = VerificationFields(
-            artifact_legibility=self._guard_required_values(result.fields.artifact_legibility),
+            artifact_legibility=self._guard_artifact_legibility(result.fields.artifact_legibility),
             brand_name=self._guard_required_values(result.fields.brand_name),
             class_type_designation=self._guard_required_values(result.fields.class_type_designation),
             alcohol_content=self._guard_alcohol_content(result.fields.alcohol_content),
             net_contents=self._guard_required_values(result.fields.net_contents),
             name_address=self._guard_required_values(result.fields.name_address),
-            country_of_origin=self._guard_required_values(result.fields.country_of_origin),
-            government_warning=self._guard_required_values(result.fields.government_warning),
+            country_of_origin=self._guard_country_of_origin(result.fields.country_of_origin),
+            color_additive_disclosure=self._guard_required_values(
+                result.fields.color_additive_disclosure
+            ),
+            government_warning=self._guard_government_warning(result.fields.government_warning),
         )
         overall_status = self._overall_status(guarded_fields)
         return ProviderResult(
@@ -29,19 +42,74 @@ class ResultGuardService:
         )
 
     def _guard_required_values(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if self._is_backend_not_required(field):
+            return field.model_copy(update={"status": "pass"})
+
         if field.status == "pass" and (
             not self._has_reviewable_value(field.application_value)
             or not self._has_reviewable_value(field.label_value)
         ):
             return field.model_copy(
                 update={
-                    "status": "needs_review",
-                    "reason": "A passing field must include reviewable application and label values.",
+                    "status": "fail",
+                    "reason": "A passing field must include readable application and label values.",
+                }
+        )
+        return field
+
+    def _guard_government_warning(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        field = self._guard_required_values(field)
+        if field.status != "pass":
+            return field
+
+        label_value = field.label_value or ""
+        if GOVERNMENT_WARNING_PREFIX not in label_value:
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": (
+                        "Government warning can pass only when the prefix "
+                        "'GOVERNMENT WARNING:' is visible in all caps."
+                    ),
+                }
+            )
+
+        after_prefix = label_value.split(GOVERNMENT_WARNING_PREFIX, 1)[1]
+        body = after_prefix.strip()
+        if not self._normalized_warning_body_matches(body):
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": self._warning_mismatch_reason(body),
+                }
+            )
+
+        return field.model_copy(update={"status": "pass"})
+
+    def _guard_artifact_legibility(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if field.status == "pass" and not self._has_reviewable_value(field.label_value):
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": "Artifact legibility can pass only when the label image is readable.",
                 }
             )
         return field
 
+    def _guard_country_of_origin(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if self._is_domestic_no_origin_pass(field):
+            return field.model_copy(
+                update={
+                    "status": "pass",
+                    "label_value": "No imported origin statement visible",
+                }
+            )
+        return self._guard_required_values(field)
+
     def _guard_alcohol_content(self, field: VerificationFieldResult) -> VerificationFieldResult:
+        if self._is_backend_not_required(field):
+            return field.model_copy(update={"status": "pass"})
+
         if self._has_clear_exception(field):
             reason = field.reason
             if field.status != "pass":
@@ -54,8 +122,8 @@ class ResultGuardService:
         if application_abv is None or label_abv is None:
             return field.model_copy(
                 update={
-                    "status": "needs_review",
-                    "reason": "Alcohol content could not be confidently extracted as an alcohol-content value.",
+                    "status": "fail",
+                    "reason": "Alcohol content could not be extracted as a readable alcohol-content value.",
                 }
             )
 
@@ -77,6 +145,29 @@ class ResultGuardService:
             return False
         return normalized not in {"n/a", "na", "none", "unknown", "unreadable", "missing"}
 
+    def _is_domestic_no_origin_pass(self, field: VerificationFieldResult) -> bool:
+        if field.status != "pass":
+            return False
+        application_value = (field.application_value or "").strip().lower()
+        if application_value != "domestic":
+            return False
+        combined = " ".join(
+            [
+                field.label_value or "",
+                field.reason or "",
+                " ".join(evidence.summary for evidence in field.evidence),
+            ]
+        ).lower()
+        no_origin_markers = [
+            "no imported origin",
+            "no import origin",
+            "no country-of-origin statement",
+            "no country of origin statement",
+            "no foreign origin",
+            "domestic",
+        ]
+        return any(marker in combined for marker in no_origin_markers)
+
     def _has_clear_exception(self, field: VerificationFieldResult) -> bool:
         application_value = (field.application_value or "").lower()
         label_value = (field.label_value or "").lower()
@@ -84,11 +175,32 @@ class ResultGuardService:
         combined = " ".join([application_value, label_value, reason])
         exception_markers = ["not required", "legitimately absent", "exempt"]
         wine_markers = ["table wine", "light wine", "wine designation"]
+        malt_markers = ["malt", "beer"]
+        no_trigger_markers = [
+            "no added nonbeverage",
+            "no nonbeverage",
+            "not federally required",
+            "federally optional",
+        ]
 
-        return (
+        wine_exception = (
             any(marker in application_value for marker in exception_markers)
             and any(marker in label_value for marker in exception_markers)
             and any(marker in combined for marker in wine_markers)
+        )
+        malt_exception = (
+            any(marker in application_value for marker in exception_markers)
+            and any(marker in label_value for marker in exception_markers)
+            and any(marker in combined for marker in malt_markers)
+            and any(marker in combined for marker in no_trigger_markers)
+        )
+        return wine_exception or malt_exception
+
+    def _is_backend_not_required(self, field: VerificationFieldResult) -> bool:
+        return (
+            (field.reason or "").startswith("Backend applicability:")
+            and (field.application_value or "").strip().lower() == "not required"
+            and (field.label_value or "").strip().lower() == "not required"
         )
 
     def _extract_abv(self, value: str | None) -> float | None:
@@ -96,9 +208,9 @@ class ResultGuardService:
             return None
 
         normalized = value.strip().lower()
-        proof_match = re.search(r"(\d+(?:\.\d+)?)\s*proof\b", normalized)
+        proof_match = re.search(r"(\d+(?:[\.,]\d+)?)\s*proof\b", normalized)
         if proof_match:
-            return float(proof_match.group(1)) / 2
+            return float(proof_match.group(1).replace(",", ".")) / 2
 
         if re.search(r"\d", normalized) and (
             "%" in normalized
@@ -107,14 +219,42 @@ class ResultGuardService:
             or "abv" in normalized
             or self._is_bare_number(normalized)
         ):
-            number_match = re.search(r"\d+(?:\.\d+)?", normalized)
+            number_match = re.search(r"\d+(?:[\.,]\d+)?", normalized)
             if number_match:
-                return float(number_match.group(0))
+                return float(number_match.group(0).replace(",", "."))
 
         return None
 
     def _is_bare_number(self, value: str) -> bool:
-        return re.fullmatch(r"\s*\d+(?:\.\d+)?\s*", value) is not None
+        return re.fullmatch(r"\s*\d+(?:[\.,]\d+)?\s*", value) is not None
+
+    def _normalized_warning_body_matches(self, value: str) -> bool:
+        actual = self._warning_tokens(value)
+        expected = self._warning_tokens(GOVERNMENT_WARNING_BODY)
+        return actual[: len(expected)] == expected
+
+    def _warning_mismatch_reason(self, value: str) -> str:
+        actual = self._warning_tokens(value)
+        expected = self._warning_tokens(GOVERNMENT_WARNING_BODY)
+        for index, expected_token in enumerate(expected):
+            if index >= len(actual):
+                return (
+                    "Government warning is missing required text starting at "
+                    f"'{expected_token}'."
+                )
+            if actual[index] != expected_token:
+                return (
+                    "Government warning text differs at "
+                    f"'{expected_token}'; label shows '{actual[index]}'."
+                )
+        return (
+            "Government warning can pass only when the exact federal warning text "
+            "is visible word-for-word with no missing or changed words."
+        )
+
+    def _warning_tokens(self, value: str) -> list[str]:
+        normalized = value.replace("\u00a0", " ")
+        return re.findall(r"[a-z0-9]+|[^\w\s]", normalized.lower())
 
     def _overall_status(self, fields: VerificationFields) -> VerificationStatus:
         field_statuses = [
@@ -125,12 +265,11 @@ class ResultGuardService:
             fields.net_contents.status,
             fields.name_address.status,
             fields.country_of_origin.status,
+            fields.color_additive_disclosure.status,
             fields.government_warning.status,
         ]
         if "fail" in field_statuses:
             return VerificationStatus.fail
-        if "needs_review" in field_statuses:
-            return VerificationStatus.needs_review
         return VerificationStatus.pass_status
 
     def _summary(
@@ -146,10 +285,6 @@ class ResultGuardService:
         if failed_fields:
             return f"Required checks failed: {', '.join(failed_fields)}."
 
-        review_fields = self._field_labels(fields, "needs_review")
-        if review_fields:
-            return f"Manual review needed: {', '.join(review_fields)}."
-
         return original_summary
 
     def _field_labels(self, fields: VerificationFields, status: str) -> list[str]:
@@ -161,6 +296,7 @@ class ResultGuardService:
             "net_contents": "net contents",
             "name_address": "name/address",
             "country_of_origin": "country of origin",
+            "color_additive_disclosure": "color additive disclosure",
             "government_warning": "government warning",
         }
         dumped = fields.model_dump()

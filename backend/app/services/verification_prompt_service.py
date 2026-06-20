@@ -1,68 +1,226 @@
+import json
+import re
 from dataclasses import dataclass
+from typing import Mapping
 
 
 @dataclass(frozen=True, slots=True)
 class VerificationPrompt:
     system_instruction: str
     user_instruction: str
+    requested_fields: tuple[str, ...]
+    deterministic_fields: Mapping[str, dict]
+
+
+@dataclass(frozen=True, slots=True)
+class SpecialistVerificationPrompt:
+    name: str
+    system_instruction: str
+    user_instruction: str
+    requested_fields: tuple[str, ...]
+    deterministic_fields: Mapping[str, dict]
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationPlan:
+    requested_fields: tuple[str, ...]
+    deterministic_fields: Mapping[str, dict]
+    alcohol_mode: str
+    country_mode: str
+
+
+ApplicationValues = Mapping[str, str | bool | None]
 
 
 class VerificationPromptService:
-    def build_prompt(self) -> VerificationPrompt:
+    def build_prompt(self, application_values: ApplicationValues | None = None) -> VerificationPrompt:
+        plan = self._build_plan(application_values)
         return VerificationPrompt(
-            system_instruction=self._system(),
-            user_instruction=self._user(),
+            system_instruction=self._system(plan),
+            user_instruction=self._user(application_values, plan),
+            requested_fields=plan.requested_fields,
+            deterministic_fields=plan.deterministic_fields,
+        )
+
+    def build_specialist_prompts(
+        self,
+        application_values: ApplicationValues | None = None,
+    ) -> tuple[SpecialistVerificationPrompt, ...]:
+        plan = self._build_plan(application_values)
+        requested = set(plan.requested_fields)
+        specialist_fields = {
+            "warning_legibility": (
+                "artifact_legibility",
+                "government_warning",
+            ),
+            "product_fields": tuple(
+                field
+                for field in (
+                    "brand_name",
+                    "class_type_designation",
+                    "alcohol_content",
+                    "net_contents",
+                    "color_additive_disclosure",
+                )
+                if field in requested
+            ),
+            "origin_fields": (
+                "name_address",
+                "country_of_origin",
+            ),
+        }
+        return tuple(
+            SpecialistVerificationPrompt(
+                name=name,
+                system_instruction=self._specialist_system(plan, name, fields),
+                user_instruction=self._specialist_user(application_values, name, fields),
+                requested_fields=fields,
+                deterministic_fields=plan.deterministic_fields,
+            )
+            for name, fields in specialist_fields.items()
+            if fields
         )
 
     # ------------------------------------------------------------------
     # System instruction
     # ------------------------------------------------------------------
 
-    def _system(self) -> str:
+    def _system(self, plan: VerificationPlan) -> str:
         sections = [
             (
-                "NON-NEGOTIABLE VISUAL GATE: government_warning passes only when a government "
-                "warning is visibly printed on the affixed label artwork. The normal pass case "
-                "has the literal heading 'GOVERNMENT WARNING'. For small, skewed, or rotated "
-                "affixed labels, a visibly printed warning block may also pass when the heading "
-                "or two-numbered-warning structure is identifiable. If the warning area is "
-                "absent, blanked out, covered, only inferred, or only present in non-label form "
-                "text, government_warning must be fail and overall status must be fail. Never "
-                "invent or fill in missing label text from regulatory knowledge."
+                "You verify TTB-style alcohol label artwork against APPLICATION_VALUES_JSON. "
+                "Return JSON only. The image is label artwork only; never extract application "
+                "values from it. Use only visible label text for label_value and evidence."
             ),
             (
-                "You are an alcohol label verification assistant for TTB-style application and "
-                "label artwork review. Return JSON only. Do not include markdown. Be conservative: "
-                "if the application section, label artwork section, or a required value is missing, "
-                "unreadable, or ambiguous, use needs_review instead of pass. Exception: "
-                "government_warning is a binary field; if the required warning is missing, "
-                "unreadable, ambiguous, covered, or not visibly printed on the label artwork, "
-                "government_warning must be fail."
+                "Government warning is strict and label-only: pass only when the label shows "
+                "the exact federal warning statement word-for-word, with no missing, changed, "
+                "reordered, or paraphrased words. The prefix 'GOVERNMENT WARNING:' must be "
+                "all caps and visibly bold. For government_warning.label_value, transcribe the "
+                "full visible warning statement when it is readable; preserve the prefix letter "
+                "case exactly as printed and never rewrite a lowercase, title-case, or mixed-case "
+                "prefix into all caps."
             ),
             self._task_intro(),
             self._overall_verdict_rules(),
             self._field_artifact_legibility(),
             self._field_brand_name(),
             self._field_class_type_designation(),
-            self._field_alcohol_content(),
+            self._field_alcohol_content(plan.alcohol_mode)
+            if "alcohol_content" in plan.requested_fields
+            else "",
             self._field_net_contents(),
             self._field_name_address(),
-            self._field_country_of_origin(),
+            self._field_country_of_origin(plan.country_mode),
+            self._field_color_additive_disclosure()
+            if "color_additive_disclosure" in plan.requested_fields
+            else "",
             self._field_government_warning(),
-            self._output_format(),
+            self._output_format(plan.requested_fields),
             self._hard_rules(),
         ]
-        return "\n\n".join(sections)
+        return "\n\n".join(section for section in sections if section)
+
+    def _specialist_system(
+        self,
+        plan: VerificationPlan,
+        specialist_name: str,
+        requested_fields: tuple[str, ...],
+    ) -> str:
+        field_sections = {
+            "artifact_legibility": self._field_artifact_legibility(),
+            "brand_name": self._field_brand_name(),
+            "class_type_designation": self._field_class_type_designation(),
+            "alcohol_content": self._field_alcohol_content(plan.alcohol_mode),
+            "net_contents": self._field_net_contents(),
+            "name_address": self._field_name_address(),
+            "country_of_origin": self._field_country_of_origin(plan.country_mode),
+            "color_additive_disclosure": self._field_color_additive_disclosure(),
+            "government_warning": self._field_government_warning(),
+        }
+        sections = [
+            (
+                "You are the "
+                f"{specialist_name} specialist for TTB-style alcohol label artwork. "
+                "Return JSON only. The image is label artwork only; never extract "
+                "application values from it. Use only visible label text for "
+                "label_value and evidence."
+            ),
+            (
+                "Government warning is strict and label-only: pass only when the label shows "
+                "the exact federal warning statement word-for-word, with no missing, changed, "
+                "reordered, or paraphrased words. The prefix 'GOVERNMENT WARNING:' must be "
+                "all caps and visibly bold. For government_warning.label_value, transcribe the "
+                "full visible warning statement when it is readable; preserve the prefix letter "
+                "case exactly as printed and never rewrite a lowercase, title-case, or mixed-case "
+                "prefix into all caps."
+            )
+            if "government_warning" in requested_fields
+            else "",
+            self._task_intro(),
+            self._overall_verdict_rules(),
+            *[field_sections[field] for field in requested_fields],
+            self._output_format(requested_fields),
+            self._hard_rules(),
+        ]
+        return "\n\n".join(section for section in sections if section)
 
     # ------------------------------------------------------------------
     # User instruction
     # ------------------------------------------------------------------
 
-    def _user(self) -> str:
+    def _user(
+        self,
+        application_values: ApplicationValues | None,
+        plan: VerificationPlan,
+    ) -> str:
         return (
-            "Review the attached combined application-and-label artifact using the system rules. "
-            "Use only text visible in the image; do not infer or fill missing label text from the rules."
+            "Review the attached label artwork image using the system rules. "
+            "Compare only against APPLICATION_VALUES_JSON below. Use visible label text only for "
+            "label_value and evidence; do not infer or fill missing label text from the rules. "
+            "Return only the requested fields: "
+            f"{', '.join(plan.requested_fields)}.\n\n"
+            "APPLICATION_VALUES_JSON:\n"
+            f"{self._application_values_json(application_values)}"
         )
+
+    def _specialist_user(
+        self,
+        application_values: ApplicationValues | None,
+        specialist_name: str,
+        requested_fields: tuple[str, ...],
+    ) -> str:
+        return (
+            "Review the attached label artwork image using only your assigned "
+            f"{specialist_name} rules. Compare only against APPLICATION_VALUES_JSON below. "
+            "Use visible label text only for label_value and evidence; do not infer or fill "
+            "missing label text from the rules. Return only these field keys: "
+            f"{', '.join(requested_fields)}.\n\n"
+            "APPLICATION_VALUES_JSON:\n"
+            f"{self._application_values_json(application_values)}"
+        )
+
+    def _application_values_json(self, application_values: ApplicationValues | None) -> str:
+        values = {
+            "brand_name": "{{brand_name}}",
+            "beverage_class": "{{beverage_class}}",
+            "class_type_designation": "{{class_type_designation}}",
+            "alcohol_content": "{{alcohol_content}}",
+            "net_contents": "{{net_contents}}",
+            "name_address": "{{name_address}}",
+            "country_of_origin": "{{country_of_origin}}",
+            "malt_added_nonbeverage_alcohol": "{{malt_added_nonbeverage_alcohol}}",
+            "malt_color_additive_applicable": "{{malt_color_additive_applicable}}",
+        }
+        if application_values is not None:
+            values.update(
+                {
+                    key: "" if value is None else str(value)
+                    for key, value in application_values.items()
+                    if key in values
+                }
+            )
+        return json.dumps(values, indent=2, sort_keys=True)
 
     # ------------------------------------------------------------------
     # Task intro
@@ -70,15 +228,12 @@ class VerificationPromptService:
 
     def _task_intro(self) -> str:
         return """\
-Review this single combined application-and-label artifact. It should contain both the label \
-application and the label artwork.
-
-First, mentally separate the artifact into two regions:
-- application: the form or application data submitted for approval.
-- label_artwork: the actual product label image/artwork.
-
-Do not compare two values from the same region. If you cannot tell which region a value came \
-from, mark that field needs_review."""
+TASK:
+Compare APPLICATION_VALUES_JSON to the uploaded label image for only the requested
+fields. For each requested field, copy the submitted value into application_value,
+extract visible label text into label_value, then apply the PASS/FAIL rule. For
+artifact_legibility use application_value='N/A - text entry form'. For
+government_warning use application_value='Required federal government warning'."""
 
     # ------------------------------------------------------------------
     # Overall verdict rules
@@ -87,17 +242,10 @@ from, mark that field needs_review."""
     def _overall_verdict_rules(self) -> str:
         return """\
 OVERALL VERDICT RULES:
-- pass: every field is pass.
-- needs_review: any field is needs_review and none are fail.
-- fail: any field is fail.
-
-PER-FIELD STATUS RULES (apply to every field):
-- pass: you extracted the application value and label value from the correct regions and they \
-satisfy the field rule.
-- fail: both values are readable and clearly do not satisfy the rule.
-- needs_review: either value is unreadable, region attribution is uncertain, extraction may be \
-wrong, or the rule cannot be applied with confidence.
-- Do not make exact type-size or millimeter compliance claims from the image."""
+Overall pass only if every returned field passes. Any failed field makes the
+overall result fail. Fail fields with missing, unreadable, ambiguous, cut-off, or
+insufficient label evidence. Do not make type-size or millimeter claims from the
+image."""
 
     # ------------------------------------------------------------------
     # Field 1: artifact_legibility
@@ -105,23 +253,12 @@ wrong, or the rule cannot be applied with confidence.
 
     def _field_artifact_legibility(self) -> str:
         return """\
-FIELD 1 — artifact_legibility:
-Confirm the artifact contains both an application section and a label artwork section, and that \
-the text needed for review is readable.
-
-PASS: Both regions are identifiable, and the required application values and label values can be read confidently. Do not fail only \
-because the photo is imperfect. Glare, dim lighting, scan noise, or mild skew can still pass when the required text remains readable. 
-
-NEEDS REVIEW: Both regions are present but partially obscured, low-resolution, or cut off in a \
-way that limits specific field extractions. Note which areas are affected.
-
-FAIL: The image is so degraded that no meaningful extraction is possible, or the document is \
-clearly not an alcohol label application.
-
-Cascade rule: if artifact_legibility is needs_review or fail, all other fields except \
-government_warning must also be needs_review — do not pass or fail those other fields when the \
-artifact cannot be reliably read. Government warning is always binary: if the required warning \
-cannot be confirmed in full, government_warning must be fail."""
+FIELD 1 - artifact_legibility:
+PASS: The image is label artwork/photo and the needed label text is readable.
+Imperfect photos can pass when text remains readable.
+FAIL: No label is visible, the image is not label artwork, or needed text is too
+degraded, obscured, cut off, low-resolution, or ambiguous to extract. If this
+fails, any field whose evidence cannot be read must also fail."""
 
     # ------------------------------------------------------------------
     # Field 2: brand_name
@@ -129,16 +266,12 @@ cannot be confirmed in full, government_warning must be fail."""
 
     def _field_brand_name(self) -> str:
         return """\
-FIELD 2 — brand_name:
-Extract the brand name from the application and from the label artwork and compare them.
-
-PASS: Names match exactly, or differ only in capitalization, trademark symbols (® ™), or \
-punctuation such as apostrophe presence/absence.
-
-FAIL: Substantively different wording (e.g. application "Eagle Rare" vs. label "Eagle Reserve"); \
-brand name absent from label entirely.
-
-No beverage-type differences for this field."""
+FIELD 2 - brand_name:
+Compare APPLICATION_VALUES_JSON.brand_name to the brand name printed on the label.
+PASS: Same brand, allowing capitalization, punctuation, apostrophe, spacing, and
+trademark-symbol differences.
+FAIL: Different brand wording, brand absent, obscured brand text, or multiple
+plausible brand names."""
 
     # ------------------------------------------------------------------
     # Field 3: class_type_designation
@@ -146,87 +279,49 @@ No beverage-type differences for this field."""
 
     def _field_class_type_designation(self) -> str:
         return """\
-FIELD 3 — class_type_designation:
-The application states a broad legal class; the label may state a more specific subtype within \
-that class. A recognized subtype always passes. Only fail on a genuine cross-class conflict.
-
-PASS:
-- Exact or equivalent match (e.g. "Red Wine" and "Dry Red Table Wine" are equivalent).
-- The label type is a recognized member of the application's class:
-  - Application "Distilled Spirits" passes with label: Gin, Gin Specialties, Vodka, Rum, \
-Whiskey, Bourbon Whiskey, Tennessee Whiskey, Straight Bourbon, Rye Whiskey, Brandy, Cognac, \
-Tequila, Mezcal, Aquavit, Schnapps, Liqueur, Cordial, or any other recognized distilled \
-spirits designation. Distilled spirits also pass when the label uses flavor, specialty, or \
-marketing wording such as "cider", "apple cider", "winter cider", "punch", "cream", or \
-"cocktail" but the label still shows distilled-spirits context such as whiskey/gin/liqueur, \
-proof, or % alc/vol. Do not treat that flavor wording as a malt beverage or wine class by itself.
-  - Application "Wine" passes with label: Chardonnay, Cabernet Sauvignon, Merlot, Pinot Noir, \
-Rosé, Dry Red Table Wine, Table Wine, Sparkling Wine, Champagne, Prosecco, Cava, Moscato, \
-Riesling, Sake (if Japanese or domestically brewed), Dessert Wine, Port-style, any grape \
-varietal or recognized wine designation.
-  - Application "Malt Beverage" passes with label: India Pale Ale, Stout, Porter, Lager, \
-Pilsner, Ale, Wheat Beer, Hefeweizen, Sour, Belgian Tripel, or any recognized beer/ale style.
-
-FAIL: The label designates a genuinely different legal class from the application — e.g. Wine \
-application with Vodka label, Distilled Spirits application with Lager/Beer/Ale label and no \
-spirits proof/ABV context, Malt Beverage application with Wine label."""
+FIELD 3 - class_type_designation:
+Compare APPLICATION_VALUES_JSON.class_type_designation to the class/type printed
+on the label. Compare the legal beverage class and recognized designation, not
+only literal words.
+PASS: Exact/equivalent match, or the label type is a recognized member of the
+submitted broad class (spirits type, wine varietal/style, beer/ale style). If
+the application says Table Wine or Light Wine, a visible specific wine
+designation such as Chardonnay, Cabernet Sauvignon, red wine, white wine, or rose
+wine can satisfy the class/type designation when no conflicting class appears.
+Harmless descriptive modifiers such as dry, off dry, sweet, reserve, estate, or
+similar style terms can still pass when the core designation matches. Obvious
+OCR/label spelling variants can pass when the intended designation is clear, such
+as artifical matching artificial in "white grape wine with artificial flavor."
+FAIL: Different legal class, absent/partly legible type, or marketing language
+makes the legal class unclear."""
 
     # ------------------------------------------------------------------
     # Field 4: alcohol_content
     # ------------------------------------------------------------------
 
-    def _field_alcohol_content(self) -> str:
+    def _field_alcohol_content(self, mode: str) -> str:
+        if mode == "required":
+            return """\
+FIELD 4 - alcohol_content:
+Alcohol content is required or was submitted for comparison. Extract the visible
+label ABV/proof and compare it to APPLICATION_VALUES_JSON.alcohol_content.
+Normalize before comparing: decimal comma = decimal point, and proof / 2 = ABV%.
+PASS: Normalized application and label alcohol values match.
+FAIL: Label alcohol content is absent, unreadable, not an alcohol quantity, or
+mismatched after normalization. Alcohol is always required for distilled spirits
+and for wine above 14% ABV or at/below 7% ABV."""
+
         return """\
-FIELD 4 — alcohol_content:
-First identify the beverage class from the application. Rules differ by class.
-
-Valid alcohol content formats: "13% ALC/VOL", "13% alcohol by volume", "13.0% Alc./Vol.", \
-"90 proof", ranges such as "80-89 proof", lower bounds such as "48 proof up".
-The label_value must never be class/type text (e.g. "DRY RED TABLE WINE") or net contents. \
-If the extracted value is not an alcohol quantity, status must be needs_review.
-
---- Distilled Spirits: ABV/proof is always required ---
-
-PASS: Application and label values match when normalized (proof ÷ 2 = ABV%). For a stated \
-range such as "80–89 proof," the label value falls within that range. For a lower bound such \
-as "48 proof up," the label value is at or above that bound. Exact values must match exactly \
-after normalization; 49.5% is not the same as 50%.
-
-NEEDS REVIEW: Value present but region attribution is unclear; proof vs. ABV is ambiguous and \
-cannot be normalized; extracted value is not an alcohol quantity.
-
-FAIL: Both values are readable and clearly do not match after normalization; ABV/proof is \
-entirely absent from the label.
-
---- Wine: ABV is conditionally required ---
-
-Required when ABV is above 14%. Required when ABV is at or below 7%. Legitimately omittable \
-for still wines in the 7–14% range that carry a "table wine" or "light wine" designation on \
-the label.
-
-PASS: Values match when normalized; OR ABV is omitted on both the application and the label \
-for a 7–14% wine with a table wine or light wine designation. If application_value and \
-label_value both say alcohol content is "Not required for table wine designation" or equivalent, \
-status must be pass, not needs_review (set reason: "not required for table wine designation").
-
-NEEDS REVIEW: ABV is present on one region but not the other; cannot determine whether the \
-product exceeds 14% or whether a table/light wine designation applies; value is partially legible.
-
-FAIL: ABV is clearly required (above 14% or at/below 7%) but is missing from the label; both \
-values are readable and clearly do not match.
-
---- Malt Beverage: ABV is federally optional ---
-
-ABV is optional unless the product contains alcohol from added nonbeverage flavors or \
-ingredients other than hops extract, or state law requires it.
-
-PASS: Both provided and they match; both omitted and the class allows omission; application \
-omits ABV but label provides one with no contradiction.
-
-NEEDS REVIEW: One region has ABV and the other does not; unclear whether added flavors trigger \
-the requirement; extracted value is not an alcohol quantity.
-
-FAIL: Both values are provided and clearly do not match."""
+FIELD 4 - alcohol_content:
+Alcohol content may be optional for this beverage class/type.
+Normalize before comparing: decimal comma = decimal point, and proof / 2 = ABV%.
+PASS: Both values are present and normalized alcohol values match; or alcohol
+content is omitted and allowed for a 7-14% table/light wine designation; or a
+malt beverage omits alcohol content and no added-nonbeverage alcohol trigger is
+visible.
+FAIL: Values conflict, required alcohol content is absent, the label shows an
+added-nonbeverage alcohol/flavor trigger without alcohol content, or the omission
+cannot be evaluated confidently."""
 
     # ------------------------------------------------------------------
     # Field 5: net_contents
@@ -234,18 +329,15 @@ FAIL: Both values are provided and clearly do not match."""
 
     def _field_net_contents(self) -> str:
         return """\
-FIELD 5 — net_contents:
-Compare net contents from the application and label artwork, including units. Required on all \
-labels regardless of beverage type.
-
-PASS: Quantities and units match, allowing only formatting normalization — e.g. "750 mL" = \
-"750ml" = "750 ML".
-
-FAIL: Different quantity (e.g. "750 mL" vs. "1 L"); different unit system even at equivalent \
-volume (e.g. application "750 mL" vs. label "25.4 fl oz" — same physical volume but different \
-representation is a mismatch); net contents entirely absent from label.
-
-Unit normalization only — never convert between metric and customary even if numerically equivalent."""
+FIELD 5 - net_contents:
+Compare APPLICATION_VALUES_JSON.net_contents to net contents printed on the label.
+PASS: Same quantity and unit, allowing formatting differences like 750 mL/750ml.
+Pass only when the exact quantity and unit are visibly printed as net contents on
+the label. Do not infer common bottle sizes from the application value, barcode,
+UPC digits, container shape, or product category. Do not use an application value
+as label_value unless the same quantity/unit is visible on the label.
+FAIL: Missing, partly legible, different quantity/unit, outside the visible label,
+or requires metric/customary conversion."""
 
     # ------------------------------------------------------------------
     # Field 6: name_address
@@ -253,134 +345,101 @@ Unit normalization only — never convert between metric and customary even if n
 
     def _field_name_address(self) -> str:
         return """\
-FIELD 6 — name_address:
-Verify the producer, bottler, packer, or importer name and address appears on the label and \
-matches the application. Required on all labels.
-
-PASS: Name and city/state (or country for imports) appear on the label and match the \
-application; an appropriate explanatory phrase is present for domestic products (see below). 
-
-NEEDS REVIEW: Address partially legible and city/state cannot be confirmed; explanatory phrase \
-absent but may be on a panel not shown; importer vs. domestic attribution unclear.
-
-FAIL: Name and address completely absent from the label; entity named on the label is clearly \
-a different company from the application.
-
-Required explanatory phrases by class (domestic products only):
-- Distilled Spirits: Distilled By, Distilled and Bottled By, Bottled By, Produced By, \
-Manufactured By.
-- Wine: Produced and Bottled By, Cellared and Bottled By, Vinted and Bottled By, Bottled By, \
-Packed By.
-- Malt Beverage: Brewed By, Brewed and Bottled By, Brewed and Canned By, Bottled By, Packed By.
-
-For imported products: the importer name and address are required on the label; the foreign \
-producer name and address are optional. The phrase requirement applies to the importer statement."""
+FIELD 6 - name_address:
+Compare APPLICATION_VALUES_JSON.name_address to the producer, bottler, packer, or
+importer name and address printed on the label. Required on all labels.
+PASS: Submitted name and city/state or country appear, with any required phrase
+such as Produced By, Bottled By, Imported By, Brewed By, or Distilled By.
+FAIL: Missing/different entity, incomplete or partly legible address, unconfirmed
+city/state/country, or unclear importer/domestic attribution."""
 
     # ------------------------------------------------------------------
     # Field 7: country_of_origin
     # ------------------------------------------------------------------
 
-    def _field_country_of_origin(self) -> str:
+    def _field_country_of_origin(self, mode: str) -> str:
+        if mode == "domestic":
+            return """\
+FIELD 7 - country_of_origin:
+Application says Domestic. PASS if the label does not show an imported origin
+statement. A label with no country-of-origin statement can pass for Domestic.
+When passing Domestic because no imported origin statement is visible, set
+label_value exactly to "No imported origin statement visible"; do not use N/A.
+FAIL if the label says Product of, Imported from, Made in a foreign country, or
+otherwise indicates imported origin."""
+
+        if mode.startswith("country:"):
+            country = mode.split(":", 1)[1]
+            return """\
+FIELD 7 - country_of_origin:
+Application provides a country name for an imported product. Compare the visible
+label country/appellation/origin evidence to APPLICATION_VALUES_JSON.country_of_origin.
+PASS: The label shows the same country or a clearly matching country/appellation/origin
+statement for that country.
+FAIL: No imported origin statement is visible, the country conflicts with the
+application country, or the label appears clearly domestic with no matching
+origin evidence.
+Application country for this row: """ + country + "."
+
         return """\
-FIELD 7 — country_of_origin:
-Applies to imported products only. For clearly domestic products, pass when no import \
-country-of-origin statement is required.
-
-PASS:
-- Imported: a statement such as "Product of [Country]," "Imported from [Country]," or \
-"Made in [Country]" appears on the label and matches the application's stated origin. \
-Note: "Imported by" alone does not satisfy this requirement.
-- Domestic: no import statement is required; if one appears anyway it must match the application.
-
-NEEDS REVIEW: Origin statement is partially legible; cannot determine from the application or \
-context whether the product is domestic or imported.
-
-FAIL: Product is clearly imported (application states a foreign country of origin) but the \
-label has no country of origin statement; the country stated on the label does not match \
-the application."""
+FIELD 7 - country_of_origin:
+APPLICATION_VALUES_JSON.country_of_origin must be Domestic or a country name.
+If it is blank or unknown, fail this field as missing application origin value.
+If the label indicates imported origin while the application is blank or unknown,
+fail."""
 
     # ------------------------------------------------------------------
-    # Field 8: government_warning
+    # Field 8: color_additive_disclosure
+    # ------------------------------------------------------------------
+
+    def _field_color_additive_disclosure(self) -> str:
+        return """\
+FIELD 8 - color_additive_disclosure:
+This check applies only to malt beverages when APPLICATION_VALUES_JSON.malt_color_additive_applicable is true.
+PASS: A color additive disclosure is visible and readable on the label.
+FAIL: The disclosure is absent, unreadable, obscured, or cannot be confidently
+identified. Do not evaluate color-additive requirements outside this yes/no
+applicability flag."""
+
+    # ------------------------------------------------------------------
+    # Field 9: government_warning
     # ------------------------------------------------------------------
 
     def _field_government_warning(self) -> str:
-        return (
-            "FIELD 8 — government_warning:\n"
-            "Same rule for all beverage classes. Do not extract application_value from the "
-            "artifact — always set it to 'Required federal government warning'. Set label_value to "
-            "the exact warning text you can read from the label artwork when readable (or "
-            "'Warning block visibly present' when the label is small or rotated but the warning "
-            "block is visibly present, or 'Not present' if absent, or "
-            "'Unreadable or incomplete' if obscured).\n\n"
-            "Use only the affixed label artwork region, usually below the application form heading "
-            "'AFFIX COMPLETE SET OF LABELS BELOW'. Ignore the application form, instructions, "
-            "certification text, TTB form footer, and any other non-label text. Do not infer that "
-            "the warning exists because the product is alcoholic; it must be visibly printed on "
-            "the label artwork itself. The words 'GOVERNMENT WARNING' must be visibly printed on "
-            "the label artwork for this field to pass. A blank white strip, covered/whited-out "
-            "area, barcode area, UPC placeholder, ingredient paragraph, sulfite statement, or "
-            "importer/address text is not a government warning. If the label has a white or blank "
-            "rectangle where text appears to have been removed or covered, treat the government "
-            "warning as absent and fail.\n\n"
-            "This field has only two allowed statuses: pass or fail. Never return needs_review "
-            "for government_warning.\n\n"
-            "Required warning: the standard federal alcoholic-beverage government warning. It "
-            "must have the literal heading 'GOVERNMENT WARNING' and two numbered statements: "
-            "one about pregnancy and birth-defect risk, and one about impaired ability to drive "
-            "or operate machinery and possible health problems.\n\n"
-            "Before assigning pass, verify from the image itself that the literal heading "
-            "'GOVERNMENT WARNING' is visible on the label artwork. If you are guessing, fail.\n\n"
-            "PASS: The complete warning statement appears on the label artwork. Prefer reading "
-            "all words in order. Minor OCR variance in capitalization or spacing is acceptable. "
-            "For small, skewed, or rotated affixed labels, do not fail solely because the text is "
-            "hard to OCR when a government-warning block is visibly present on the label artwork "
-            "and you can identify the GOVERNMENT WARNING heading plus the two numbered sentence "
-            "structure. To pass, label_value must be either the full warning text as read from "
-            "the label artwork or 'Warning block visibly present' for small/rotated label artwork "
-            "where the complete required warning block is visibly present.\n\n"
-            "FAIL: The statement is absent, partially visible, partially legible, obscured, cut "
-            "off, incomplete, truncated, altered, paraphrased, missing either numbered sentence, "
-            "missing the GOVERNMENT WARNING heading, or not word-for-word identical to the "
-            "required government warning when readable. If there is no visible warning block on "
-            "the label artwork itself, fail this field. If the label has a blank or covered area "
-            "where warning text would normally appear, treat the warning as absent and fail."
-        )
+        return """\
+FIELD 9 - government_warning:
+Required exact text:
+GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.
+
+PASS: The complete warning statement is visible/readable and matches the required
+text word-for-word, including numbering, punctuation, and every required word.
+The prefix 'GOVERNMENT WARNING:' is all caps and visibly bold. The warning body
+may be sentence case or all caps; do not fail solely because the body text is all
+caps when the words and punctuation are otherwise exact.
+FAIL: Warning is absent, unreadable, partial, missing any required word, has any
+changed/reordered/paraphrased wording, has different punctuation that changes the
+required statement, has a lowercase/title-case/mixed-case prefix, lacks a visibly
+bold prefix, is hidden/covered, or is inferred from regulatory knowledge.
+For label_value, return the full visible warning statement when readable, not
+only the heading. Preserve the visible heading case exactly as printed. If the
+image shows 'government warning:', 'Government Warning:', or any other non-exact
+case, return the full visible statement with that non-exact heading and fail the
+field."""
 
     # ------------------------------------------------------------------
     # Output format
     # ------------------------------------------------------------------
 
-    def _output_format(self) -> str:
-        field_shape = (
-            '"status":"pass|fail|needs_review",'
-            '"application_value":"...",'
-            '"label_value":"...",'
-            '"reason":"short internal note",'
-            '"evidence":[]'
-        )
-        return (
-            "Return this JSON shape exactly:\n"
-            "{\n"
-            '  "status": "pass|fail|needs_review",\n'
-            '  "summary": "one short sentence",\n'
-            '  "fields": {\n'
-            f'    "artifact_legibility":       {{{field_shape}}},\n'
-            f'    "brand_name":                {{{field_shape}}},\n'
-            f'    "class_type_designation":    {{{field_shape}}},\n'
-            f'    "alcohol_content":           {{{field_shape}}},\n'
-            f'    "net_contents":              {{{field_shape}}},\n'
-            f'    "name_address":              {{{field_shape}}},\n'
-            f'    "country_of_origin":         {{{field_shape}}},\n'
-            '    "government_warning":        {'
-            '"status":"pass|fail",'
-            '"application_value":"Required federal government warning",'
-            '"label_value":"<what appears on label, Warning block visibly present, Not present, or Unreadable or incomplete>",'
-            '"reason":"short internal note",'
-            '"evidence":[]'
-            "}\n"
-            "  }\n"
-            "}"
-        )
+    def _output_format(self, requested_fields: tuple[str, ...]) -> str:
+        requested = ", ".join(requested_fields)
+        return f"""\
+Return this JSON object only:
+{{"status":"pass|fail","summary":"one short sentence","fields":{{...}}}}
+
+Each field object must be:
+{{"status":"pass|fail","application_value":"...","label_value":"...","reason":"short internal note","evidence":[]}}
+
+Requested fields: {requested}."""
 
     # ------------------------------------------------------------------
     # Hard rules recap
@@ -390,10 +449,142 @@ the application."""
         return """\
 HARD RULES:
 1. Return only the JSON object; do not include markdown or explanatory prose.
-2. Compare application values only to label artwork values; never compare two values from the same region.
-3. Use needs_review instead of pass for any non-government-warning field that is missing, unreadable, ambiguous, or uncertain.
-4. Government warning is binary: status must be pass or fail, never needs_review.
-5. Government warning passes only when the label artwork visibly prints the warning heading or, for small/skewed/rotated labels, an identifiable government-warning block with two numbered warning statements.
-6. Never invent or fill in government_warning.label_value from regulatory knowledge; use only text visibly read from the label artwork.
-7. If the warning is absent, covered, blanked out, inferred, or only present in non-label form text, government_warning must be fail.
-8. Overall status is fail if any field is fail; otherwise needs_review if any field is needs_review; otherwise pass."""
+2. Application comparison fields use APPLICATION_VALUES_JSON for application_value.
+3. artifact_legibility and government_warning are label-only checks with fixed application_value values.
+4. Return only the requested field keys in fields; backend-only not-required fields are not requested.
+5. Use the image only for label_value/evidence; missing, unreadable, ambiguous, or uncertain evidence fails.
+6. Overall status is fail if any returned field fails."""
+
+    # ------------------------------------------------------------------
+    # Applicability planning
+    # ------------------------------------------------------------------
+
+    def _build_plan(self, application_values: ApplicationValues | None) -> VerificationPlan:
+        requested_fields = [
+            "artifact_legibility",
+            "brand_name",
+            "class_type_designation",
+            "net_contents",
+            "name_address",
+            "country_of_origin",
+            "government_warning",
+        ]
+        deterministic_fields: dict[str, dict] = {}
+        alcohol_mode = self._alcohol_mode(application_values)
+        if alcohol_mode.startswith("not_required"):
+            deterministic_fields["alcohol_content"] = {
+                "status": "pass",
+                "application_value": "Not Required",
+                "label_value": "Not Required",
+                "reason": "Backend applicability: Alcohol content is not required for this row.",
+                "evidence": [],
+            }
+        else:
+            requested_fields.insert(3, "alcohol_content")
+
+        color_mode = self._color_mode(application_values)
+        if color_mode == "required":
+            requested_fields.insert(-1, "color_additive_disclosure")
+        else:
+            deterministic_fields["color_additive_disclosure"] = {
+                "status": "pass",
+                "application_value": "Not Required",
+                "label_value": "Not Required",
+                "reason": (
+                    "Backend applicability: Malt color additive disclosure is not "
+                    "required for this row."
+                ),
+                "evidence": [],
+            }
+
+        return VerificationPlan(
+            requested_fields=tuple(requested_fields),
+            deterministic_fields=deterministic_fields,
+            alcohol_mode="optional" if alcohol_mode == "optional" else "required",
+            country_mode=self._country_mode(application_values),
+        )
+
+    def _alcohol_mode(self, application_values: ApplicationValues | None) -> str:
+        if application_values is None:
+            return "required"
+
+        beverage_class = self._normalize_beverage_class(application_values.get("beverage_class"))
+        alcohol_content = self._clean_text(application_values.get("alcohol_content"))
+        class_type = application_values.get("class_type_designation")
+
+        if beverage_class == "spirits":
+            return "required"
+
+        if beverage_class == "malt":
+            if self._is_truthy(application_values.get("malt_added_nonbeverage_alcohol")):
+                return "required"
+            return "not_required_malt"
+
+        if beverage_class == "wine":
+            abv = self._parse_abv(alcohol_content)
+            if abv is not None and abv > 14:
+                return "required"
+            if self._is_table_or_light_wine(class_type) and (
+                abv is None or 7 <= abv <= 14
+            ):
+                return "not_required_table_wine"
+            return "required"
+
+        return "optional"
+
+    def _color_mode(self, application_values: ApplicationValues | None) -> str:
+        if application_values is None:
+            return "not_required"
+        beverage_class = self._normalize_beverage_class(application_values.get("beverage_class"))
+        if beverage_class == "malt" and self._is_truthy(
+            application_values.get("malt_color_additive_applicable")
+        ):
+            return "required"
+        return "not_required"
+
+    def _country_mode(self, application_values: ApplicationValues | None) -> str:
+        if application_values is None:
+            return "unknown"
+
+        country = self._clean_text(application_values.get("country_of_origin"))
+        normalized = country.lower()
+        if not normalized:
+            return "unknown"
+        if normalized == "domestic":
+            return "domestic"
+        return f"country:{country}"
+
+    def _normalize_beverage_class(self, value: str | bool | None) -> str | None:
+        normalized = self._clean_text(value).lower().replace("-", "_").replace(" ", "_")
+        if normalized in {"spirits", "distilled_spirits", "distilled"}:
+            return "spirits"
+        if normalized in {"wine", "wines"}:
+            return "wine"
+        if normalized in {"malt", "malt_beverage", "malt_beverages", "beer"}:
+            return "malt"
+        return None
+
+    def _is_table_or_light_wine(self, value: str | bool | None) -> bool:
+        normalized = self._clean_text(value).lower()
+        return bool(re.search(r"\b(table|light)\s+wine\b", normalized))
+
+    def _parse_abv(self, value: str | None) -> float | None:
+        if not value:
+            return None
+        match = re.search(r"(\d+(?:[.,]\d+)?)", value)
+        if not match:
+            return None
+        try:
+            return float(match.group(1).replace(",", "."))
+        except ValueError:
+            return None
+
+    def _is_truthy(self, value: str | bool | None) -> bool:
+        if isinstance(value, bool):
+            return value
+        return self._clean_text(value).lower() in {"1", "true", "yes", "y", "on"}
+
+    def _clean_text(self, value: str | bool | None) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return (value or "").strip()
