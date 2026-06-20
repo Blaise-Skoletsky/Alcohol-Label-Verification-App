@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 from app.models.verification import (
     VerificationFieldResult,
@@ -23,7 +24,9 @@ class ResultGuardService:
         guarded_fields = VerificationFields(
             artifact_legibility=self._guard_artifact_legibility(result.fields.artifact_legibility),
             brand_name=self._guard_required_values(result.fields.brand_name),
-            class_type_designation=self._guard_required_values(result.fields.class_type_designation),
+            class_type_designation=self._guard_class_type_designation(
+                result.fields.class_type_designation
+            ),
             alcohol_content=self._guard_alcohol_content(result.fields.alcohol_content),
             net_contents=self._guard_required_values(result.fields.net_contents),
             name_address=self._guard_required_values(result.fields.name_address),
@@ -55,6 +58,26 @@ class ResultGuardService:
                     "reason": "A passing field must include readable application and label values.",
                 }
         )
+        return field
+
+    def _guard_class_type_designation(
+        self, field: VerificationFieldResult
+    ) -> VerificationFieldResult:
+        field = self._guard_required_values(field)
+        if field.status != "pass":
+            return field
+
+        application_classes = self._beverage_class_markers(field.application_value)
+        label_classes = self._beverage_class_markers(field.label_value)
+        if application_classes and label_classes and application_classes.isdisjoint(label_classes):
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "reason": (
+                        "Application beverage class and visible label beverage class conflict."
+                    ),
+                }
+            )
         return field
 
     def _guard_government_warning(self, field: VerificationFieldResult) -> VerificationFieldResult:
@@ -227,6 +250,46 @@ class ResultGuardService:
 
     def _is_bare_number(self, value: str) -> bool:
         return re.fullmatch(r"\s*\d+(?:[\.,]\d+)?\s*", value) is not None
+
+    def _beverage_class_markers(self, value: str | None) -> set[str]:
+        if not value:
+            return set()
+
+        normalized = (
+            unicodedata.normalize("NFKD", value.lower())
+            .encode("ascii", "ignore")
+            .decode("ascii")
+            .replace("/", " ")
+        )
+        normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        markers: set[str] = set()
+
+        if re.search(
+            r"\b(wine|chardonnay|cabernet|merlot|pinot|riesling|sauvignon|syrah|"
+            r"zinfandel|moscato|sangiovese|grenache|rose)\b",
+            normalized,
+        ):
+            markers.add("wine")
+
+        if re.search(
+            r"\b(beer|malt|ale|lager|stout|porter|ipa|pilsner|saison|cerveza)\b",
+            normalized,
+        ):
+            markers.add("malt")
+
+        if re.search(
+            r"\b(spirit|spirits|distilled|vodka|gin|rum|whiskey|whisky|tequila|"
+            r"brandy|liqueur|schnapps|mezcal|bourbon|rye)\b",
+            normalized,
+        ):
+            markers.add("spirits")
+
+        if "barley wine" in normalized:
+            markers.discard("wine")
+            markers.add("malt")
+
+        return markers
 
     def _normalized_warning_body_matches(self, value: str) -> bool:
         actual = self._warning_tokens(value)

@@ -411,12 +411,7 @@ export function BatchGridModal({
                     <HeadCell>Status</HeadCell>
                   </div>
 
-                  {statuses.map(({ r, st }) => {
-                    const abvOpt =
-                      r.bev === "malt"
-                        ? !r.maltAddedNonbeverageAlcohol
-                        : r.bev === "wine" && /\b(table|light)\s+wine\b/i.test(r.classType);
-                    return (
+                  {statuses.map(({ r, st }) => (
                       <div
                         key={r.id}
                         style={{
@@ -592,7 +587,7 @@ export function BatchGridModal({
                         <input
                           className="bf-input"
                           value={r.abv}
-                          placeholder={abvOpt ? "optional" : "e.g. 40%"}
+                          placeholder="10% by vol."
                           onChange={(e) => edit(r.id, { abv: e.target.value })}
                         />
                         <input
@@ -677,8 +672,7 @@ export function BatchGridModal({
                           </button>
                         </div>
                       </div>
-                    );
-                  })}
+                    ))}
                 </div>
               </div>
             </div>

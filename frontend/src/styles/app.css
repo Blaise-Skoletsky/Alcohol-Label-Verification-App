@@ -658,6 +658,57 @@
   flex-shrink: 0;
 }
 
+.demo-batch-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 252, 0.72);
+  animation: lv-fade 0.18s ease both;
+}
+
+.demo-batch-loading-panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid #e6e3d9;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 650;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.16);
+}
+
+.demo-batch-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #dedbd1;
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: lv-spin 0.72s linear infinite;
+  flex-shrink: 0;
+}
+
+.demo-batch-loading-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.demo-batch-loading-copy span:first-child {
+  color: var(--ink);
+}
+
+.demo-batch-loading-copy span:last-child {
+  color: #686862;
+  font-size: 12.5px;
+  font-weight: 520;
+  line-height: 1.35;
+  max-width: 440px;
+}
+
 /* ============ DETAIL SLIDE-OVER ============ */
 .slideover-backdrop {
   position: fixed;

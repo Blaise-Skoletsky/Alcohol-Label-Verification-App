@@ -203,7 +203,6 @@ export function App() {
   async function loadDemoBatch(manifestUrl: string) {
     if (!manifestUrl || demoBatchLoading) return;
     setDemoBatchLoading(true);
-    notify("Loading hosted sample batch...");
     try {
       const rows = await loadDemoBatchRows(manifestUrl);
       setBatchPhotos(null);
@@ -286,6 +285,21 @@ export function App() {
           </div>
         </main>
       </div>
+
+      {demoBatchLoading ? (
+        <div className="demo-batch-loading" role="status" aria-live="polite">
+          <div className="demo-batch-loading-panel">
+            <span className="demo-batch-loading-spinner" aria-hidden="true" />
+            <span className="demo-batch-loading-copy">
+              <span>Loading hosted sample batch...</span>
+              <span>
+                This demonstration includes a balanced mix of labels expected to pass and
+                labels expected to fail.
+              </span>
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       {detailRow ? (
         <DetailModal

@@ -280,20 +280,29 @@ plausible brand names."""
     def _field_class_type_designation(self) -> str:
         return """\
 FIELD 3 - class_type_designation:
-Compare APPLICATION_VALUES_JSON.class_type_designation to the class/type printed
-on the label. Compare the legal beverage class and recognized designation, not
-only literal words.
-PASS: Exact/equivalent match, or the label type is a recognized member of the
-submitted broad class (spirits type, wine varietal/style, beer/ale style). If
-the application says Table Wine or Light Wine, a visible specific wine
-designation such as Chardonnay, Cabernet Sauvignon, red wine, white wine, or rose
-wine can satisfy the class/type designation when no conflicting class appears.
+Compare both APPLICATION_VALUES_JSON.beverage_class and
+APPLICATION_VALUES_JSON.class_type_designation to the class/type printed on the
+label. The broad beverage class must line up first: wine labels cannot pass for
+malt/beer applications, malt/beer labels cannot pass for wine applications, and
+distilled spirits labels cannot pass for wine or malt applications. In
+application_value, include both submitted values, for example "malt / Beer". In
+label_value, include the visible label class family and designation when
+readable, for example "wine / Cabernet Sauvignon" or "malt / IPA".
+PASS: The visible label class family matches APPLICATION_VALUES_JSON.beverage_class
+and the visible type/designation is an exact/equivalent match or a recognized
+member of that submitted broad class (spirits type, wine varietal/style,
+beer/ale style). If the application says Table Wine or Light Wine, a visible
+specific wine designation such as Chardonnay, Cabernet Sauvignon, red wine, white
+wine, or rose wine can satisfy the class/type designation when no conflicting
+class appears.
 Harmless descriptive modifiers such as dry, off dry, sweet, reserve, estate, or
 similar style terms can still pass when the core designation matches. Obvious
 OCR/label spelling variants can pass when the intended designation is clear, such
 as artifical matching artificial in "white grape wine with artificial flavor."
-FAIL: Different legal class, absent/partly legible type, or marketing language
-makes the legal class unclear."""
+FAIL: Different broad beverage class, different legal class/type, absent/partly
+legible type, or marketing language makes the legal class unclear. A wine label
+submitted as Beer/Ale/Malt fails this field even if the brand and other fields
+match."""
 
     # ------------------------------------------------------------------
     # Field 4: alcohol_content

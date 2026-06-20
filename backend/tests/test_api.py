@@ -516,7 +516,8 @@ def test_prompt_allows_specific_wine_designation_for_table_wine_class_type() -> 
     assert "If" in prompt.system_instruction
     assert "application says Table Wine or Light Wine" in prompt.system_instruction
     assert "Chardonnay" in prompt.system_instruction
-    assert "no conflicting class appears" in prompt.system_instruction
+    assert "no conflicting" in prompt.system_instruction
+    assert "class appears" in prompt.system_instruction
 
 
 def test_prompt_allows_class_type_modifiers_and_obvious_spelling_variants() -> None:
@@ -536,6 +537,28 @@ def test_prompt_allows_class_type_modifiers_and_obvious_spelling_variants() -> N
     assert "off dry" in prompt.system_instruction
     assert "OCR/label spelling variants" in prompt.system_instruction
     assert "artifical matching artificial" in prompt.system_instruction
+
+
+def test_prompt_requires_beverage_class_to_match_label_class_family() -> None:
+    prompt = VerificationPromptService().build_prompt(
+        {
+            "brand_name": "Example",
+            "beverage_class": "malt",
+            "class_type_designation": "Beer",
+            "alcohol_content": "5% by vol.",
+            "net_contents": "12 fl. oz.",
+            "name_address": "Example Brewery, Portland, OR",
+            "country_of_origin": "Domestic",
+        }
+    )
+
+    assert "Compare both APPLICATION_VALUES_JSON.beverage_class" in prompt.system_instruction
+    assert "The broad beverage class must line up first" in prompt.system_instruction
+    assert "wine labels cannot pass" in prompt.system_instruction
+    assert "malt/beer applications" in prompt.system_instruction
+    assert "wine label" in prompt.system_instruction
+    assert "Beer/Ale/Malt" in prompt.system_instruction
+    assert "fails this field" in prompt.system_instruction
 
 
 def test_prompt_forbids_net_contents_inference() -> None:
@@ -975,6 +998,34 @@ def test_result_guard_fails_non_abv_text_for_alcohol_content() -> None:
     assert result.summary == "Required checks failed: alcohol content."
     assert result.fields.alcohol_content.status == "fail"
     assert "alcohol-content" in result.fields.alcohol_content.reason
+
+
+def test_result_guard_fails_passing_class_type_when_beverage_class_conflicts() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.pass_status,
+            summary="Model claimed everything passed.",
+            fields=make_fields(
+                field_updates={
+                    "class_type_designation": make_field(
+                        application_value="malt / Beer",
+                        label_value="wine / Cabernet Sauvignon",
+                        reason="Model incorrectly accepted a class mismatch.",
+                    )
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: class/type designation."
+    assert result.fields.class_type_designation.status == "fail"
+    assert "beverage class" in result.fields.class_type_designation.reason
 
 
 def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
