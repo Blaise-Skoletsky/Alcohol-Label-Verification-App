@@ -6,6 +6,7 @@ import { SamplePickerModal } from "./components/SamplePickerModal";
 import { Sidebar } from "./components/Sidebar";
 import { TutorialModal } from "./components/TutorialModal";
 import { makeRow, useLabelRows } from "./hooks/useLabelRows";
+import { loadDemoBatchRows, type DemoBatchGridRow } from "./lib/demoBatch";
 import type { SampleEntry } from "./generated/sampleLabels";
 import type { LabelRow } from "./types/verification";
 
@@ -70,6 +71,8 @@ export function App() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [batchPhotos, setBatchPhotos] = useState<File[] | null>(null);
+  const [demoBatchRows, setDemoBatchRows] = useState<DemoBatchGridRow[] | null>(null);
+  const [demoBatchLoading, setDemoBatchLoading] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
   useEffect(() => {
@@ -187,12 +190,30 @@ export function App() {
     setDetailId(null);
     setFilter("all");
     setBatchPhotos(null);
+    setDemoBatchRows(null);
     notify(summary);
   }
 
   function startBatchUpload(files: File[]) {
     if (files.length === 0) return;
+    setDemoBatchRows(null);
     setBatchPhotos(files);
+  }
+
+  async function loadDemoBatch(manifestUrl: string) {
+    if (!manifestUrl || demoBatchLoading) return;
+    setDemoBatchLoading(true);
+    notify("Loading hosted sample batch...");
+    try {
+      const rows = await loadDemoBatchRows(manifestUrl);
+      setBatchPhotos(null);
+      setDemoBatchRows(rows);
+      notify(`Loaded ${rows.length} hosted sample rows. Review them, then verify.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "We could not load the hosted sample batch.");
+    } finally {
+      setDemoBatchLoading(false);
+    }
   }
 
   const filters: { key: Filter; label: string; count: number }[] = [
@@ -211,6 +232,7 @@ export function App() {
           onAddLabel={openAddLabel}
           onBatchUpload={startBatchUpload}
           onUseSamples={() => setPickerOpen(true)}
+          onLoadDemoBatch={loadDemoBatch}
         />
 
         <main className="main">
@@ -290,6 +312,17 @@ export function App() {
           initialPhotos={batchPhotos}
           onStartOver={() => setBatchPhotos(null)}
           onClose={() => setBatchPhotos(null)}
+          onComplete={completeBatch}
+          onError={notify}
+        />
+      ) : null}
+
+      {demoBatchRows ? (
+        <BatchGridModal
+          initialPhotos={[]}
+          initialRows={demoBatchRows}
+          onStartOver={() => setDemoBatchRows(null)}
+          onClose={() => setDemoBatchRows(null)}
           onComplete={completeBatch}
           onError={notify}
         />

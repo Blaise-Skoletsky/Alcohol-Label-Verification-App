@@ -18,6 +18,14 @@ class Settings(BaseSettings):
         default="local",
         validation_alias=AliasChoices("ALV_PROVIDER_MODE", "PROVIDER_MODE", "MODEL_PROVIDER"),
     )
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ALV_ENVIRONMENT", "ENVIRONMENT"),
+    )
+    demo_batch_manifest_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ALV_DEMO_BATCH_MANIFEST_URL", "DEMO_BATCH_MANIFEST_URL"),
+    )
     local_model_base_url: str = Field(
         default="http://localhost:1234/v1/chat/completions",
         validation_alias=AliasChoices("ALV_LOCAL_MODEL_BASE_URL", "LOCAL_MODEL_BASE_URL"),

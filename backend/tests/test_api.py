@@ -231,10 +231,43 @@ def test_config_endpoint_exposes_safe_limits() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["provider_mode"] == "local"
+    assert body["environment"] == "development"
+    assert body["demo_batch_manifest_url"] is None
     assert body["max_batch_labels"] == 350
     assert ".png" in body["allowed_file_types"]
     assert ".pdf" not in body["allowed_file_types"]
     assert "openrouter_api_key" not in body
+    app.dependency_overrides.clear()
+
+
+def test_config_endpoint_exposes_demo_manifest_only_in_production() -> None:
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        provider_mode="local",
+        environment="development",
+        demo_batch_manifest_url="https://example.test/manifest.json",
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["environment"] == "development"
+    assert body["demo_batch_manifest_url"] is None
+
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        provider_mode="local",
+        environment="production",
+        demo_batch_manifest_url="https://example.test/manifest.json",
+    )
+
+    response = client.get("/api/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["environment"] == "production"
+    assert body["demo_batch_manifest_url"] == "https://example.test/manifest.json"
     app.dependency_overrides.clear()
 
 

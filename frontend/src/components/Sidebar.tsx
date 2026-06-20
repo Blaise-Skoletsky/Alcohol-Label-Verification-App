@@ -7,13 +7,22 @@ type SidebarProps = {
   onAddLabel: () => void;
   onBatchUpload: (files: File[]) => void;
   onUseSamples: () => void;
+  onLoadDemoBatch: (manifestUrl: string) => void;
 };
 
-export function Sidebar({ counts, onAddLabel, onBatchUpload, onUseSamples }: SidebarProps) {
+export function Sidebar({
+  counts,
+  onAddLabel,
+  onBatchUpload,
+  onUseSamples,
+  onLoadDemoBatch,
+}: SidebarProps) {
   const { config } = useAppConfig();
   const acceptedTypes = config.allowedFileTypes.join(",");
   const displayTypes = formatFileTypes(config.allowedFileTypes);
   const batchUploadHint = `Verify up to ${config.maxBatchLabels} labels`;
+  const showDemoBatch =
+    config.environment.toLowerCase() === "production" && Boolean(config.demoBatchManifestUrl);
 
   function handleBatchFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
@@ -37,16 +46,17 @@ export function Sidebar({ counts, onAddLabel, onBatchUpload, onUseSamples }: Sid
       </div>
 
       <div className="sidebar-actions">
-        <button
-          type="button"
-          className="btn-outline"
-          disabled
-          title="Sample batch demos are coming soon."
-        >
-          <GridIcon />
-          Load sample batch
-          <span className="demo-chip">DEMO</span>
-        </button>
+        {showDemoBatch ? (
+          <button
+            type="button"
+            className="btn-outline"
+            onClick={() => onLoadDemoBatch(config.demoBatchManifestUrl ?? "")}
+          >
+            <GridIcon />
+            Load sample batch
+            <span className="demo-chip">DEMO</span>
+          </button>
+        ) : null}
         <button type="button" className="btn-outline" onClick={onUseSamples}>
           <GridIcon />
           Use sample labels

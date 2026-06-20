@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { makeRow } from "../hooks/useLabelRows";
 import type { BeverageClass, LabelRow } from "../types/verification";
+import type { DemoBatchGridRow } from "../lib/demoBatch";
 
 export type BatchComplete = (
   allRows: LabelRow[],
@@ -10,6 +11,7 @@ export type BatchComplete = (
 
 type BatchGridModalProps = {
   initialPhotos: File[];
+  initialRows?: DemoBatchGridRow[];
   onStartOver: () => void;
   onClose: () => void;
   onComplete: BatchComplete;
@@ -57,6 +59,24 @@ function rowFromFile(file: File): GridRow {
     file,
     url: URL.createObjectURL(file),
     fileName: file.name,
+  };
+}
+
+function rowFromDemoRow(row: DemoBatchGridRow): GridRow {
+  return {
+    id: nextGridId(),
+    brand: row.brand,
+    bev: row.beverageClass,
+    classType: row.classType,
+    abv: row.abv,
+    net: row.net,
+    nameAddr: row.nameAddr,
+    country: row.country,
+    maltAddedNonbeverageAlcohol: row.maltAddedNonbeverageAlcohol,
+    maltColorAdditiveApplicable: row.maltColorAdditiveApplicable,
+    file: row.file,
+    url: URL.createObjectURL(row.file),
+    fileName: row.file.name,
   };
 }
 
@@ -129,12 +149,17 @@ function rowStatus(r: GridRow): RowStatus {
 
 export function BatchGridModal({
   initialPhotos,
+  initialRows,
   onStartOver,
   onClose,
   onComplete,
 }: BatchGridModalProps) {
   const [rows, setRows] = useState<GridRow[]>(() =>
-    initialPhotos.length ? initialPhotos.map(rowFromFile) : [blankRow()],
+    initialRows?.length
+      ? initialRows.map(rowFromDemoRow)
+      : initialPhotos.length
+        ? initialPhotos.map(rowFromFile)
+        : [blankRow()],
   );
   const [confirmPartial, setConfirmPartial] = useState(false);
   // The photo currently zoomed in the lightbox, or null.

@@ -84,6 +84,8 @@ Use `PROVIDER_MODE=openrouter` with `OPENROUTER_API_KEY` to call OpenRouter from
 
 See [docs/azure-app-service.md](docs/azure-app-service.md) for the Azure App Service setup and GitHub Actions deployment flow.
 
+The production Azure deployment can expose a hosted sample batch upload. When `ENVIRONMENT=production` and `DEMO_BATCH_MANIFEST_URL` points at the Azure Blob manifest, the sidebar shows `Load sample batch` and pre-fills the batch spreadsheet from the hosted CSV and image blobs. This button is intentionally hidden outside production.
+
 ## Assumptions
 
 See [docs/assumptions.md](docs/assumptions.md) for the rollout assumptions.

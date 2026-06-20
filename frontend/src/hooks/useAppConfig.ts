@@ -39,5 +39,14 @@ function normalizeConfig(data: ConfigResponse): AppConfig {
       typeof data.provider_mode === "string" && data.provider_mode.trim().length > 0
         ? data.provider_mode
         : DEFAULT_CONFIG.providerMode,
+    environment:
+      typeof data.environment === "string" && data.environment.trim().length > 0
+        ? data.environment
+        : DEFAULT_CONFIG.environment,
+    demoBatchManifestUrl:
+      typeof data.demo_batch_manifest_url === "string" &&
+      data.demo_batch_manifest_url.trim().length > 0
+        ? data.demo_batch_manifest_url
+        : null,
   };
 }
