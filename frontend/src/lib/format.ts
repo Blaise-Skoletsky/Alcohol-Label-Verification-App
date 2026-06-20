@@ -11,6 +11,12 @@ export function formatTimestamp(value: number) {
   }).format(value);
 }
 
+export function parseTimestampMs(value: string | null | undefined, fallback = Date.now()) {
+  if (!value) return fallback;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
 export function camelCase(value: string) {
   return value.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 }

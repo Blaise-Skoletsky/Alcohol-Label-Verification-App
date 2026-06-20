@@ -7,8 +7,13 @@ type LabelListViewProps = {
   rows: LabelRow[];
   selected: Set<string>;
   allSelected: boolean;
+  sortDirection: "asc" | "desc";
+  emptyStateTitle?: string;
+  emptyStateBody?: string;
   onToggleAll: () => void;
+  onToggleUpdatedSort: () => void;
   onToggle: (id: string) => void;
+  onRemove: (ids: string[]) => void;
   onOpen: (id: string) => void;
 };
 
@@ -16,8 +21,13 @@ export function LabelListView({
   rows,
   selected,
   allSelected,
+  sortDirection,
+  emptyStateTitle = "Nothing here yet",
+  emptyStateBody = "Add labels or load the sample set to get started.",
   onToggleAll,
+  onToggleUpdatedSort,
   onToggle,
+  onRemove,
   onOpen,
 }: LabelListViewProps) {
   return (
@@ -34,13 +44,26 @@ export function LabelListView({
         <div>Label</div>
         <div>Checks</div>
         <div>Result</div>
-        <div className="align-right">Updated</div>
+        <div className="align-right">
+          <button
+            type="button"
+            className="column-sort-button"
+            aria-label={`Sort by updated date ${sortDirection === "desc" ? "ascending" : "descending"}`}
+            onClick={onToggleUpdatedSort}
+          >
+            <span>Updated</span>
+            <span className="column-sort-arrow" aria-hidden="true">
+              {sortDirection === "desc" ? "\u2193" : "\u2191"}
+            </span>
+          </button>
+        </div>
+        <div className="align-right" aria-hidden="true" />
       </div>
 
       {rows.length === 0 ? (
         <div className="empty-state">
-          <h3>Nothing here yet</h3>
-          <p>Add labels or load the sample set to get started.</p>
+          <h3>{emptyStateTitle}</h3>
+          <p>{emptyStateBody}</p>
         </div>
       ) : (
         rows.map((row) => {
@@ -103,6 +126,20 @@ export function LabelListView({
               </span>
 
               <span className="updated-cell">{row.updatedAtLabel}</span>
+              <span className="row-action-cell">
+                <button
+                  type="button"
+                  className="row-remove-button"
+                  aria-label={`Remove ${row.brand || row.fileName || "label"}`}
+                  title="Remove row"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRemove([row.localId]);
+                  }}
+                >
+                  X
+                </button>
+              </span>
             </div>
           );
         })

@@ -58,6 +58,7 @@ export function makeRow(input: NewRowInput = {}): LabelRow {
     status: "draft",
     fields: null,
     summary: "Not verified yet.",
+    updatedAtMs: 0,
     updatedAtLabel: "—",
     flagged: input.flagged ?? false,
     edited: false,
@@ -192,12 +193,23 @@ export function useLabelRows(notify: Notify) {
     return row.localId;
   }
 
-  function removeRow(id: string) {
+  function removeRows(ids: string[]) {
+    const targetIds = new Set(ids);
+    if (targetIds.size === 0) return;
     setRows((current) => {
-      const target = current.find((row) => row.localId === id);
-      if (target?.imageUrl && target.imageUrl.startsWith("blob:")) URL.revokeObjectURL(target.imageUrl);
-      return current.filter((row) => row.localId !== id);
+      for (const row of current) {
+        if (targetIds.has(row.localId) && row.imageUrl && row.imageUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(row.imageUrl);
+        }
+      }
+      const next = current.filter((row) => !targetIds.has(row.localId));
+      rowsRef.current = next;
+      return next;
     });
+  }
+
+  function removeRow(id: string) {
+    removeRows([id]);
   }
 
   function replaceRows(next: LabelRow[]) {
@@ -236,9 +248,12 @@ export function useLabelRows(notify: Notify) {
       notify("Attach an image before verifying this label.");
       return;
     }
+    const updatedAtMs = Date.now();
     patchRow(id, {
       status: "processing",
       summary: "Verifying this label…",
+      updatedAtMs,
+      updatedAtLabel: formatTimestamp(updatedAtMs),
       edited: false,
       dirtyFields: [],
     });
@@ -249,14 +264,17 @@ export function useLabelRows(notify: Notify) {
         status: core.status,
         fields: core.fields,
         summary: core.summary,
+        updatedAtMs: core.updatedAtMs,
         updatedAtLabel: core.updatedAtLabel,
         serverId: findString(payload, ["item_id", "id"]) ?? row.serverId,
       });
     } catch (error) {
+      const updatedAtMs = Date.now();
       patchRow(id, {
         status: "processing-error",
         summary: friendlyError(error, "We could not verify this label. Please try again."),
-        updatedAtLabel: formatTimestamp(Date.now()),
+        updatedAtMs,
+        updatedAtLabel: formatTimestamp(updatedAtMs),
       });
     }
   }
@@ -283,6 +301,7 @@ export function useLabelRows(notify: Notify) {
       return;
     }
 
+    const updatedAtMs = Date.now();
     setRows((current) =>
       current.map((row) =>
         orderedIds.includes(row.localId)
@@ -290,6 +309,8 @@ export function useLabelRows(notify: Notify) {
               ...row,
               status: "processing",
               summary: "Verifying…",
+              updatedAtMs,
+              updatedAtLabel: formatTimestamp(updatedAtMs),
               edited: false,
               dirtyFields: [],
             }
@@ -317,6 +338,7 @@ export function useLabelRows(notify: Notify) {
         `Verifying ${files.length} label${files.length === 1 ? "" : "s"} — results stream in as each completes.`,
       );
     } catch (error) {
+      const updatedAtMs = Date.now();
       setRows((current) =>
         current.map((row) =>
           orderedIds.includes(row.localId)
@@ -324,7 +346,8 @@ export function useLabelRows(notify: Notify) {
                 ...row,
                 status: "processing-error",
                 summary: friendlyError(error, "We could not start the batch."),
-                updatedAtLabel: formatTimestamp(Date.now()),
+                updatedAtMs,
+                updatedAtLabel: formatTimestamp(updatedAtMs),
               }
             : row,
         ),
@@ -360,6 +383,7 @@ export function useLabelRows(notify: Notify) {
               status: core.status,
               fields: core.fields,
               summary: core.summary,
+              updatedAtMs: core.updatedAtMs,
               updatedAtLabel: core.updatedAtLabel,
             };
           }
@@ -392,6 +416,7 @@ export function useLabelRows(notify: Notify) {
     attachImage,
     addBlankRow,
     removeRow,
+    removeRows,
     replaceRows,
     replaceAndVerify,
     verifyRows,

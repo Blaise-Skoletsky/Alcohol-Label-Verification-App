@@ -1,5 +1,5 @@
 import { FIELD_DEFS, type BatchItem, type FieldSummary, type UiStatus } from "../types/verification";
-import { camelCase, formatTimestamp } from "./format";
+import { camelCase, formatTimestamp, parseTimestampMs } from "./format";
 import {
   findArray,
   findNestedRecord,
@@ -23,6 +23,7 @@ type BatchUpdate = Pick<
   | "status"
   | "overallLabel"
   | "summary"
+  | "updatedAtMs"
   | "updatedAtLabel"
   | "fields"
   | "rawResult"
@@ -34,6 +35,7 @@ export type ResultCore = {
   status: UiStatus;
   fields: FieldSummary[];
   summary: string;
+  updatedAtMs: number;
   updatedAtLabel: string;
   errorMessage: string;
 };
@@ -43,11 +45,13 @@ export type ResultCore = {
 export function normalizeResultCore(payload: unknown): ResultCore {
   const status = normalizeStatusFromUnknown(payload);
   const fields = extractFieldSummaries(payload);
+  const updatedAtMs = extractUpdatedAtMs(payload);
   return {
     status,
     fields,
     summary: buildSummary(status, fields, payload),
-    updatedAtLabel: extractUpdatedAt(payload),
+    updatedAtMs,
+    updatedAtLabel: formatTimestamp(updatedAtMs),
     errorMessage: getFriendlyError(payload),
   };
 }
@@ -56,6 +60,7 @@ export function normalizeSingleResult(payload: unknown, localItem: BatchItem): B
   const status = normalizeStatusFromUnknown(payload);
   const fields = extractFieldSummaries(payload);
   const summary = buildSummary(status, fields, payload);
+  const updatedAtMs = extractUpdatedAtMs(payload);
 
   return {
     ...localItem,
@@ -64,7 +69,8 @@ export function normalizeSingleResult(payload: unknown, localItem: BatchItem): B
     status,
     overallLabel: STATUS_LABELS[status],
     summary,
-    updatedAtLabel: extractUpdatedAt(payload),
+    updatedAtMs,
+    updatedAtLabel: formatTimestamp(updatedAtMs),
     fields,
     rawResult: payload,
     errorMessage: getFriendlyError(payload),
@@ -84,6 +90,7 @@ export function normalizeBatchResponse(payload: unknown, existingItems: BatchIte
     const resultSource = result ?? record;
     const fields = extractFieldSummaries(resultSource);
     const status = normalizeStatusFromUnknown(resultSource);
+    const updatedAtMs = extractUpdatedAtMs(resultSource);
     return {
       localId: matchedItem?.localId,
       serverId:
@@ -99,7 +106,8 @@ export function normalizeBatchResponse(payload: unknown, existingItems: BatchIte
       status,
       overallLabel: STATUS_LABELS[status],
       summary: buildSummary(status, fields, resultSource),
-      updatedAtLabel: extractUpdatedAt(resultSource),
+      updatedAtMs,
+      updatedAtLabel: formatTimestamp(updatedAtMs),
       fields,
       rawResult: resultSource,
       errorMessage: getFriendlyError(resultSource),
@@ -134,6 +142,7 @@ export function mergeBatchUpdates(
       status: update.status,
       overallLabel: update.overallLabel,
       summary: update.summary,
+      updatedAtMs: update.updatedAtMs,
       updatedAtLabel: update.updatedAtLabel,
       fields: update.fields,
       rawResult: update.rawResult,
@@ -281,18 +290,11 @@ function extractEvidence(source: unknown) {
     .filter((entry) => entry.trim().length > 0);
 }
 
-function extractUpdatedAt(source: unknown) {
+function extractUpdatedAtMs(source: unknown) {
   const timestamp =
     findString(source, ["updated_at", "updatedAt", "completed_at", "completedAt", "created_at"]) ??
     "";
-  if (!timestamp) {
-    return formatTimestamp(Date.now());
-  }
-  const parsed = Date.parse(timestamp);
-  if (Number.isNaN(parsed)) {
-    return formatTimestamp(Date.now());
-  }
-  return formatTimestamp(parsed);
+  return parseTimestampMs(timestamp, Date.now());
 }
 
 function normalizeStatusFromUnknown(source: unknown) {

@@ -51,6 +51,7 @@ export type LabelRow = {
   status: UiStatus;
   fields: FieldSummary[] | null;
   summary: string;
+  updatedAtMs: number;
   updatedAtLabel: string;
   flagged: boolean;
   edited: boolean;
@@ -71,6 +72,7 @@ export type BatchItem = {
   status: UiStatus;
   overallLabel: string;
   summary: string;
+  updatedAtMs: number;
   updatedAtLabel: string;
   fields: FieldSummary[];
   rawResult?: unknown;

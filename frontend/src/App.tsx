@@ -11,6 +11,7 @@ import type { SampleEntry } from "./generated/sampleLabels";
 import type { LabelRow } from "./types/verification";
 
 type Filter = "all" | "pass" | "fail" | "edited" | "draft";
+type SortDirection = "asc" | "desc";
 
 function matchesFilter(row: LabelRow, filter: Filter): boolean {
   const edited = row.edited && Boolean(row.fields);
@@ -20,6 +21,23 @@ function matchesFilter(row: LabelRow, filter: Filter): boolean {
   if (filter === "pass") return row.status === "pass";
   if (filter === "fail") return row.status === "fail" || row.status === "processing-error";
   return row.status === "draft" || row.status === "processing" || row.status === "queued";
+}
+
+function matchesSearch(row: LabelRow, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+
+  return [row.brand, row.fileName].some((value) =>
+    value.toLowerCase().includes(needle),
+  );
+}
+
+function compareUpdatedRows(a: LabelRow, b: LabelRow, direction: SortDirection): number {
+  const aHasDate = a.updatedAtMs > 0;
+  const bHasDate = b.updatedAtMs > 0;
+  if (aHasDate !== bHasDate) return aHasDate ? -1 : 1;
+  if (!aHasDate && !bHasDate) return 0;
+  return direction === "asc" ? a.updatedAtMs - b.updatedAtMs : b.updatedAtMs - a.updatedAtMs;
 }
 
 function entryToRow(entry: SampleEntry): LabelRow {
@@ -44,6 +62,7 @@ function entryToRow(entry: SampleEntry): LabelRow {
 
 export function App() {
   const [toast, setToast] = useState("");
+  const toastBelowModal = /^Loaded \d+ hosted sample rows\./.test(toast);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function notify(message: string) {
@@ -62,11 +81,14 @@ export function App() {
     editRow,
     attachImage,
     addBlankRow,
+    removeRows,
     replaceAndVerify,
     verifyRows,
   } = useLabelRows(notify);
 
   const [filter, setFilter] = useState<Filter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [updatedSortDirection, setUpdatedSortDirection] = useState<SortDirection>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -85,10 +107,33 @@ export function App() {
     }
   }, []);
 
-  const visibleRows = useMemo(
-    () => rows.filter((row) => matchesFilter(row, filter)),
-    [rows, filter],
-  );
+  const visibleRows = useMemo(() => {
+    const filteredRows = rows
+      .filter((row) => matchesFilter(row, filter))
+      .filter((row) => matchesSearch(row, searchQuery));
+    return [...filteredRows].sort((a, b) => compareUpdatedRows(a, b, updatedSortDirection));
+  }, [rows, filter, searchQuery, updatedSortDirection]);
+
+  const emptyState = useMemo(() => {
+    if (rows.length === 0) {
+      return {
+        title: "Nothing here yet",
+        body: "Add labels or load the sample set to get started.",
+      };
+    }
+
+    if (searchQuery.trim().length > 0) {
+      return {
+        title: "No matching labels",
+        body: "Try another brand, name, or file.",
+      };
+    }
+
+    return {
+      title: "No labels in this view",
+      body: "Try another status.",
+    };
+  }, [rows.length, searchQuery]);
 
   // Keep the selection clean of rows that no longer exist.
   useEffect(() => {
@@ -126,11 +171,29 @@ export function App() {
     setSelected(new Set());
   }
 
+  function clearRows(ids: string[]) {
+    if (ids.length === 0) return;
+    removeRows(ids);
+    setSelected((current) => {
+      const targetIds = new Set(ids);
+      return new Set([...current].filter((id) => !targetIds.has(id)));
+    });
+    if (detailId && ids.includes(detailId)) setDetailId(null);
+  }
+
+  function clearSelectedRows() {
+    clearRows([...selected]);
+  }
+
   function changeFilter(nextFilter: Filter) {
     if (nextFilter !== filter) {
       clearSelection();
     }
     setFilter(nextFilter);
+  }
+
+  function toggleUpdatedSort() {
+    setUpdatedSortDirection((current) => (current === "desc" ? "asc" : "desc"));
   }
 
   // ---- primary action (contextual) ----
@@ -227,7 +290,6 @@ export function App() {
     <>
       <div className="app-shell">
         <Sidebar
-          counts={statusCounts}
           onAddLabel={openAddLabel}
           onBatchUpload={startBatchUpload}
           onUseSamples={() => setPickerOpen(true)}
@@ -251,24 +313,56 @@ export function App() {
                 ))}
               </div>
 
-              <div className="toolbar-right">
-                {selected.size > 0 ? (
-                  <span className="selection-summary">
-                    <span className="selection-count">{selected.size} selected</span>
-                    <button type="button" className="selection-clear" onClick={clearSelection}>
-                      Clear
+              <div className="toolbar-lower">
+                <div className="table-search">
+                  <input
+                    type="text"
+                    className="table-search-input"
+                    aria-label="Filter labels by brand, name, or file name"
+                    placeholder="Filter labels"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                  />
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      className="table-search-clear"
+                      aria-label="Clear filter"
+                      onClick={() => setSearchQuery("")}
+                    >
+                      X
                     </button>
-                    <span className="selection-divider" />
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="primary-action"
-                  disabled={!primaryAction}
-                  onClick={() => primaryAction?.()}
-                >
-                  {primaryLabel}
-                </button>
+                  ) : null}
+                </div>
+
+                <div className="toolbar-right">
+                  {selected.size > 0 ? (
+                    <span className="selection-summary">
+                      <span className="selection-count">{selected.size} selected</span>
+                      <button type="button" className="selection-clear" onClick={clearSelection}>
+                        Deselect
+                      </button>
+                      <span className="selection-divider" />
+                    </span>
+                  ) : null}
+                  {selected.size > 0 ? (
+                    <button
+                      type="button"
+                      className="clear-selected-action"
+                      onClick={clearSelectedRows}
+                    >
+                      Clear selected
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="primary-action"
+                    disabled={!primaryAction}
+                    onClick={() => primaryAction?.()}
+                  >
+                    {primaryLabel}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -278,8 +372,13 @@ export function App() {
               rows={visibleRows}
               selected={selected}
               allSelected={allSelected}
+              sortDirection={updatedSortDirection}
+              emptyStateTitle={emptyState.title}
+              emptyStateBody={emptyState.body}
               onToggleAll={toggleSelectAll}
+              onToggleUpdatedSort={toggleUpdatedSort}
               onToggle={toggleSelect}
+              onRemove={clearRows}
               onOpen={setDetailId}
             />
           </div>
@@ -345,7 +444,7 @@ export function App() {
       {tutorialOpen ? <TutorialModal onClose={() => setTutorialOpen(false)} /> : null}
 
       {toast ? (
-        <div className="toast">
+        <div className={`toast${toastBelowModal ? " toast-below-modal" : ""}`}>
           <span className="toast-dot" aria-hidden="true" />
           {toast}
         </div>

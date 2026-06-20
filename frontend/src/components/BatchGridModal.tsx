@@ -34,8 +34,8 @@ type GridRow = {
   fileName: string;
 };
 
-const COL_TEMPLATE = "320px 1.25fr 120px 1.3fr 100px 110px 1.5fr 160px 130px 130px 140px";
-const GRID_MIN_WIDTH = 1640;
+const COL_TEMPLATE =
+  "minmax(0, 2.25fr) minmax(0, 1fr) 108px minmax(0, 1.15fr) 92px 96px minmax(0, 1.3fr) 118px 96px 96px 118px";
 const C = { green: "#0b7a4b", yellow: "#c9870f", red: "#c5362b", muted: "#b0b0aa" };
 
 let gridSeq = 0;
@@ -271,7 +271,7 @@ export function BatchGridModal({
     <div className="modal-overlay" onClick={onClose} role="presentation">
       <div
         className="modal"
-        style={{ width: "min(1640px, 97vw)", height: "min(960px, 95vh)", maxHeight: "95vh" }}
+        style={{ width: "min(1640px, 98vw)", height: "min(960px, 95vh)", maxHeight: "95vh" }}
         onClick={(event) => event.stopPropagation()}
       >
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -352,7 +352,7 @@ export function BatchGridModal({
             style={{
               flex: 1,
               minHeight: 0,
-              padding: "16px 26px 0",
+              padding: "16px 22px 0",
               display: "flex",
               flexDirection: "column",
             }}
@@ -369,7 +369,7 @@ export function BatchGridModal({
               }}
             >
               <div className="bf-scroll" style={{ flex: 1, overflow: "auto" }}>
-                <div style={{ minWidth: GRID_MIN_WIDTH }}>
+                <div style={{ width: "100%" }}>
                   <div
                     style={{
                       position: "sticky",
@@ -762,26 +762,21 @@ export function BatchGridModal({
           className="modal-overlay"
           role="dialog"
           aria-modal="true"
-          aria-label="Submit incomplete batch"
+          aria-label="Verify completed labels"
           onClick={() => setConfirmPartial(false)}
           style={{ zIndex: 90 }}
         >
           <div
             className="modal"
             onClick={(event) => event.stopPropagation()}
-            style={{ width: "min(560px, 92vw)", maxHeight: "82vh" }}
+            style={{ width: "min(680px, 92vw)", maxHeight: "82vh" }}
           >
             <div className="modal-header">
               <div className="modal-header-row">
                 <div>
                   <div className="modal-title-row">
-                    <h2>Submit only completed labels?</h2>
+                    <h2>Verify only completed labels?</h2>
                   </div>
-                  <p className="modal-subtitle">
-                    {ready} label{ready === 1 ? "" : "s"} will be verified now. The unfinished
-                    photo row{incompleteRows.length === 1 ? "" : "s"} below will not be added to
-                    the workspace.
-                  </p>
                 </div>
                 <button
                   type="button"
@@ -795,16 +790,16 @@ export function BatchGridModal({
             </div>
 
             <div className="modal-body">
-              <div className="step-card">
-                <div className="match-title">Unfinished files</div>
+              <div className="step-card batch-confirm-card">
+                <div className="match-title">Unfinished applications</div>
                 <div className="match-list">
                   {incompleteRows.map(({ r, st, index }) => (
-                    <div key={r.id} className="match-line">
+                    <div key={r.id} className="match-line batch-confirm-line">
                       <span className="match-dot unmatched" aria-hidden="true" />
-                      <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <span className="batch-confirm-name">
                         {r.fileName || `Row ${index + 1}`}
                       </span>
-                      <span className="match-note" style={{ flexShrink: 0 }}>
+                      <span className="match-note batch-confirm-status">
                         {st.label}
                       </span>
                     </div>
@@ -813,9 +808,8 @@ export function BatchGridModal({
               </div>
             </div>
 
-            <div className="modal-footer">
-              <div className="modal-footer-note">Choose No to keep filling these rows in.</div>
-              <div className="modal-footer-actions">
+            <div className="modal-footer batch-confirm-footer">
+              <div className="modal-footer-actions batch-confirm-actions">
                 <button
                   type="button"
                   className="btn-ghost"
@@ -824,7 +818,7 @@ export function BatchGridModal({
                   No, keep editing
                 </button>
                 <button type="button" className="btn-primary" onClick={submitReadyRows}>
-                  Yes, submit {ready}
+                  Yes, verify {ready} label{ready === 1 ? "" : "s"}
                 </button>
               </div>
             </div>

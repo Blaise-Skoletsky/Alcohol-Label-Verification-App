@@ -1,9 +1,7 @@
-import type { StatusCounts } from "../hooks/useLabelRows";
 import { useAppConfig } from "../hooks/useAppConfig";
 import { GridIcon, UploadIcon } from "./icons";
 
 type SidebarProps = {
-  counts: StatusCounts;
   onAddLabel: () => void;
   onBatchUpload: (files: File[]) => void;
   onUseSamples: () => void;
@@ -11,7 +9,6 @@ type SidebarProps = {
 };
 
 export function Sidebar({
-  counts,
   onAddLabel,
   onBatchUpload,
   onUseSamples,
@@ -35,14 +32,6 @@ export function Sidebar({
       <div className="sidebar-brand">
         <div className="sidebar-title">Alcohol Label Verification</div>
         <div className="sidebar-note">Not affiliated with TTB</div>
-      </div>
-
-      <div className="batch-summary">
-        <div className="batch-summary-label">This batch</div>
-        <SummaryPill label="Passed" value={counts.pass} tone="pass" />
-        <SummaryPill label="Failed" value={counts.fail} tone="fail" />
-        <SummaryPill label="Edited" value={counts.edited} tone="edited" />
-        <SummaryPill label="Not verified" value={counts.notRun} tone="neutral" />
       </div>
 
       <div className="sidebar-actions">
@@ -96,24 +85,4 @@ function formatFileTypes(types: string[]): string {
   if (unique.length === 0) return "PNG, JPG, or JPEG";
   if (unique.length === 1) return unique[0];
   return `${unique.slice(0, -1).join(", ")}, or ${unique[unique.length - 1]}`;
-}
-
-function SummaryPill({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone: "pass" | "fail" | "edited" | "neutral";
-}) {
-  return (
-    <div className={`summary-pill tone-${tone}`}>
-      <span className="summary-pill-name">
-        <span className="summary-pill-dot" aria-hidden="true" />
-        {label}
-      </span>
-      <span className="summary-pill-count">{value}</span>
-    </div>
-  );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { STATUS_LABELS, STATUS_TONES } from "../lib/status";
 import { detailFieldCards } from "../lib/rowView";
-import { BEVERAGE_CLASS_LABELS, type NewRowInput } from "../hooks/useLabelRows";
+import { BEVERAGE_CLASS_LABELS, rowReady, type NewRowInput } from "../hooks/useLabelRows";
 import type { BeverageClass, FieldKey, LabelRow } from "../types/verification";
 import { RerunIconLight } from "./icons";
 
@@ -78,6 +78,8 @@ export function DetailModal({
   const tone = stale ? "edited" : STATUS_TONES[row.status];
   const cards = detailFieldCards(row);
   const cardsByKey = new Map(cards.map((card) => [card.key, card]));
+  const readyToVerify = rowReady(row);
+  const actionDisabled = processing || !readyToVerify;
 
   const actionLabel = isDraft
     ? "Verify this label"
@@ -309,11 +311,14 @@ export function DetailModal({
             <button type="button" className="btn-close" onClick={onClose}>
               Close
             </button>
+            {!readyToVerify ? (
+              <span className="verify-disabled-note">Complete required fields first.</span>
+            ) : null}
             <button
               type="button"
               className="btn-action"
               onClick={() => onAction(row.localId)}
-              disabled={processing}
+              disabled={actionDisabled}
             >
               <RerunIconLight spinning={processing} />
               {actionLabel}
