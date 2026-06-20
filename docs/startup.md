@@ -38,12 +38,20 @@ cd C:\Users\Blaise\Documents\GitHub\Alcohol-Label-Verification-App
 
 Do not commit your `.env` file.
 
+Create your local `.env` from the checked-in example:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit `.env` for either the OpenRouter path or the local Ollama path below.
+
 ## Path A: OpenRouter Provider (What deployed URL uses)
 
 Use this path when you have an OpenRouter API key and want the backend to call
 OpenRouter. Openrouter uses powerful models that are able to pass the <5 second criteria. 
 
-Add the following environment variables to your .env. Copy them from the .env.example. 
+In `.env`, set the provider to OpenRouter and add your OpenRouter API key:
 
 ```env
 PROVIDER_MODE=openrouter
@@ -133,7 +141,7 @@ ollama list
 
 ### 3. Configure Local Provider Mode
 
-Use this `.env` when running the app through Docker:
+For Docker startup, keep these values in `.env`:
 
 ```env
 PROVIDER_MODE=local
@@ -142,7 +150,7 @@ LOCAL_MODEL_NAME=qwen2.5vl-alv:latest
 OPENROUTER_TIMEOUT_SECONDS=240
 ```
 
-Use this `.env` when running the backend directly on your machine:
+For individual backend startup, change the model URL in `.env` to `localhost`:
 
 ```env
 PROVIDER_MODE=local

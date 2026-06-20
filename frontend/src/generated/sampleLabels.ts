@@ -38,6 +38,21 @@ export const SAMPLES: SampleEntry[] = [
     }
   },
   {
+    "id": "pass-3-steves-winery-2017-05-25-glare",
+    "brand": "3 Steves Reserve",
+    "file": "pass/3_steves_winery_2017-05-25_glare.png",
+    "desc": "Expected pass: intentionally strong glare, but the required label information remains readable.",
+    "applicationValues": {
+      "brand_name": "3 Steves Reserve",
+      "beverage_class": "wine",
+      "class_type_designation": "Cabernet Sauvignon",
+      "alcohol_content": "Alcohol: 14.6% by volume",
+      "net_contents": "750 ml",
+      "name_address": "Grown, Produced and Bottled by 3 Steves Winery, Livermore Valley, California",
+      "country_of_origin": "Domestic"
+    }
+  },
+  {
     "id": "pass-3-steves-winery-2017-05-25",
     "brand": "3 Steves Reserve",
     "file": "pass/3_steves_winery_2017-05-25.png",
@@ -68,6 +83,21 @@ export const SAMPLES: SampleEntry[] = [
     }
   },
   {
+    "id": "pass-altos-2017-10-25-rotated",
+    "brand": "Altos de Inurrieta",
+    "file": "pass/altos_2017-10-25_rotated.png",
+    "desc": "Expected pass: intentionally 90-degree rotated photo, but all required label information remains visible.",
+    "applicationValues": {
+      "brand_name": "Altos de Inurrieta",
+      "beverage_class": "wine",
+      "class_type_designation": "Red Wine",
+      "alcohol_content": "Alc. 14.5% by Vol.",
+      "net_contents": "750 ml",
+      "name_address": "Imported by GV Berkeley LLC, Berkeley, California",
+      "country_of_origin": "Spain"
+    }
+  },
+  {
     "id": "pass-altos-2017-10-25",
     "brand": "Altos de Inurrieta",
     "file": "pass/altos_2017-10-25.png",
@@ -80,6 +110,21 @@ export const SAMPLES: SampleEntry[] = [
       "net_contents": "750 ml",
       "name_address": "Imported by GV Berkeley LLC, Berkeley, California",
       "country_of_origin": "Spain"
+    }
+  },
+  {
+    "id": "pass-apple-brandy-2016-11-02-rotated",
+    "brand": "Dampfwerk Apple Brandy",
+    "file": "pass/apple_brandy_2016-11-02_rotated.png",
+    "desc": "Expected pass: intentionally upside-down photo, but all required label information remains visible.",
+    "applicationValues": {
+      "brand_name": "Dampfwerk Apple Brandy",
+      "beverage_class": "spirits",
+      "class_type_designation": "Apple Brandy",
+      "alcohol_content": "43% Alc. by Vol.",
+      "net_contents": "375 ml",
+      "name_address": "Distilled and bottled by Dampfwerk Distilling, St Louis Park, MN 55416",
+      "country_of_origin": "Domestic"
     }
   },
   {
@@ -170,6 +215,21 @@ export const SAMPLES: SampleEntry[] = [
       "net_contents": "750 ml content",
       "name_address": "Produced and bottled by Blazic S. Agr. S., Localita Zegla, 16 - 34071 Cormons (GO) - Italy; Imported by Buta Distributors Inc., Delray Beach, FL",
       "country_of_origin": "Italy"
+    }
+  },
+  {
+    "id": "pass-blue-ridge-winery-llc-2018-08-24-glare",
+    "brand": "Blue Ridge",
+    "file": "pass/blue_ridge_winery_llc_2018-08-24_glare.png",
+    "desc": "Expected pass: intentionally strong glare, but the required label information remains readable.",
+    "applicationValues": {
+      "brand_name": "Blue Ridge",
+      "beverage_class": "wine",
+      "class_type_designation": "White grape wine with artificial flavor",
+      "alcohol_content": "Alc. 11% by vol.",
+      "net_contents": "750 ml",
+      "name_address": "Vinted and bottled by Blue Ridge Winery, LLC, 239 Blue Ridge Road, Saylorsburg, PA 18353",
+      "country_of_origin": "Domestic"
     }
   },
   {

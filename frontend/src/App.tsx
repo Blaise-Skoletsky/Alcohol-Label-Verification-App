@@ -385,7 +385,6 @@ export function App() {
                 <div className="toolbar-right">
                   {selected.size > 0 ? (
                     <span className="selection-summary">
-                      <span className="selection-count">{selected.size} selected</span>
                       <button type="button" className="selection-clear" onClick={clearSelection}>
                         Deselect
                       </button>

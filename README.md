@@ -9,19 +9,40 @@ structured application data. It is not meant to be a final legal approval system
 The goal is to show the product approach: what inputs I chose, what I decided not
 to support, and how I balanced speed, accuracy, and usability.
 
-## Tradeoffs
+At a technical level, I chose a fairly standard web stack on purpose: React and
+TypeScript for the frontend, FastAPI for the backend, Docker for a repeatable
+runtime, and OpenRouter for hosted model access. 
 
-The main tension during development was balancing two things:
+## Demo Testing Controls
 
-- Speed and accuracy.
-- A simple UI/UX while still keeping the workflow powerful enough for real review
-  work.
+The app includes two demo-marked buttons that are only there to make the
+prototype easier to test.
 
-The first major design decision was the input format. When I started, I was
-scraping the COLA site for labels and applications. In those scraped examples,
-the label and application often appeared together in one combined image. My first
-idea was to let users upload that single combined image and have the model pull
-out both the application text and the label text, then compare the two.
+One button creates a large spreadsheet-style batch with roughly 300 labels. I
+included this because large-batch handling was one of the requirements I wanted
+to make easy to test.
+
+The other button loads sample labels and applications that are expected to either
+pass or fail. These samples include deliberate edits and mismatches, such as
+labels where the government warning was removed or blurred, and application form
+values where the alcohol percentage does not match the label. I also included a
+few passing samples that were deliberately edited with glare or rotated labels,
+because those should still pass when the required information is visible. The
+purpose is to make the pass/fail behavior easy to inspect without manually
+assembling test data.
+
+These controls are for the take-home demo only. I would not include them as
+normal user-facing controls in a production-grade application.
+
+## Design Decisions
+
+### Input Format
+
+The first major design decision was the input format. When I started, I looked at
+COLA examples where the label and application often appeared together in one
+combined image. My first idea was to let users upload that combined image and
+have the model pull out both the application text and the label text, then
+compare the two.
 
 That approach had some appeal. It felt native to the way the COLA source data was
 already presented, and it would make batch upload very easy: users could upload a
@@ -40,13 +61,19 @@ tradeoff is that batch upload becomes harder. For a single label, the form is
 clear and easy to use. For 300 labels, nobody wants to type all of that
 application data by hand.
 
-That led to the second design decision: whether to support spreadsheet upload. I
-initially considered a spreadsheet where each row had application fields and a
-file path linking to the matching label image. I decided against making that the
-primary workflow because it is less approachable. A spreadsheet introduces schema
-errors, missing columns, file path mistakes, and the extra burden of matching
-uploaded images to text rows. That is powerful, but it is not the most intuitive
-first experience for a non-technical reviewer.
+I still think that is the right core contract for this prototype. It makes the
+comparison target explicit, avoids asking the model to infer application values
+from another document, and keeps the result easier to audit.
+
+### Batch Upload
+
+The input-format decision made batch upload the next major tradeoff. I initially
+considered a spreadsheet where each row had application fields and a file path
+linking to the matching label image. I decided against making that the primary
+workflow because it is less approachable. A spreadsheet introduces schema errors,
+missing columns, file path mistakes, and the extra burden of matching uploaded
+images to text rows. That is powerful, but it is not the most intuitive first
+experience for a non-technical reviewer.
 
 If I were extending this product, I would support both workflows: a simple guided
 form for manual review, and a spreadsheet-based batch path with a better mapping
@@ -55,9 +82,18 @@ because I wanted to avoid complicating the prototype with extra controls and
 branching workflows. The current flow is intentionally consolidated: select label
 images, enter the required application details, verify, and inspect the result.
 
-The third major decision was model execution. I knew the extraction and
-comparison step would use a vision-capable LLM. For a hosted environment, current
-vision LLM's are cheap, fast and accurate. 
+### Model Choice
+
+I knew the extraction and comparison step would use a vision-capable LLM. This is
+the part of the problem where a model is useful: reading imperfect label artwork,
+extracting visible text, comparing it to structured application values, and
+returning evidence for the reviewer.
+
+I chose OpenRouter for the hosted path because it gives the backend one API
+surface for multiple vision-capable models. That makes it easier to switch
+models, configure fallbacks, and avoid baking one provider directly into the
+product design. For this prototype, that mattered more than optimizing around a
+single vendor-specific SDK.
 
 Local execution was the harder tradeoff. I wanted the app to be runnable without
 an OpenRouter key, so I added a local provider path through Ollama. The downside
