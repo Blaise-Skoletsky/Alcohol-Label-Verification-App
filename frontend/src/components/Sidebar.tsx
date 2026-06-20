@@ -1,7 +1,8 @@
-import { useAppConfig } from "../hooks/useAppConfig";
 import { GridIcon, UploadIcon } from "./icons";
+import type { AppConfig } from "../types/config";
 
 type SidebarProps = {
+  config: AppConfig;
   onAddLabel: () => void;
   onBatchUpload: (files: File[]) => void;
   onUseSamples: () => void;
@@ -9,12 +10,12 @@ type SidebarProps = {
 };
 
 export function Sidebar({
+  config,
   onAddLabel,
   onBatchUpload,
   onUseSamples,
   onLoadDemoBatch,
 }: SidebarProps) {
-  const { config } = useAppConfig();
   const acceptedTypes = config.allowedFileTypes.join(",");
   const displayTypes = formatFileTypes(config.allowedFileTypes);
   const batchUploadHint = `Verify up to ${config.maxBatchLabels} labels`;

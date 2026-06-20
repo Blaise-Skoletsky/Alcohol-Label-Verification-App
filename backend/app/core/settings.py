@@ -26,6 +26,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("ALV_DEMO_BATCH_MANIFEST_URL", "DEMO_BATCH_MANIFEST_URL"),
     )
+    tutorial_video_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ALV_TUTORIAL_VIDEO_URL", "TUTORIAL_VIDEO_URL"),
+    )
     local_model_base_url: str = Field(
         default="http://localhost:1234/v1/chat/completions",
         validation_alias=AliasChoices("ALV_LOCAL_MODEL_BASE_URL", "LOCAL_MODEL_BASE_URL"),

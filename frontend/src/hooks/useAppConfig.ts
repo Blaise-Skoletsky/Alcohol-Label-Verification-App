@@ -48,5 +48,10 @@ function normalizeConfig(data: ConfigResponse): AppConfig {
       data.demo_batch_manifest_url.trim().length > 0
         ? data.demo_batch_manifest_url
         : null,
+    tutorialVideoUrl:
+      typeof data.tutorial_video_url === "string" &&
+      data.tutorial_video_url.trim().length > 0
+        ? data.tutorial_video_url
+        : null,
   };
 }

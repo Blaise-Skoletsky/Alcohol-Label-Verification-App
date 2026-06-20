@@ -15,6 +15,9 @@ def api_config(settings: Settings = Depends(get_settings)) -> ConfigResponse:
         demo_batch_manifest_url=settings.demo_batch_manifest_url
         if settings.environment.lower() == "production"
         else None,
+        tutorial_video_url=settings.tutorial_video_url
+        if settings.environment.lower() == "production"
+        else None,
         max_upload_mb=round(settings.max_upload_size_bytes / (1024 * 1024), 1),
         max_batch_labels=settings.max_batch_count,
         batch_concurrency=settings.batch_concurrency,

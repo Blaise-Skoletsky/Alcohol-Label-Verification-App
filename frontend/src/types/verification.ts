@@ -34,6 +34,8 @@ export type FieldSummary = {
 // the user types the values, attaches an image, and the model compares them.
 export type LabelRow = {
   localId: string;
+  createdAtMs: number;
+  createdOrder: number;
   brand: string;
   beverageClass: BeverageClass;
   classType: string;
@@ -51,8 +53,10 @@ export type LabelRow = {
   status: UiStatus;
   fields: FieldSummary[] | null;
   summary: string;
-  updatedAtMs: number;
-  updatedAtLabel: string;
+  modifiedAtMs: number;
+  modifiedAtLabel: string;
+  verificationStartedAtMs: number | null;
+  verificationCompletedAtMs: number | null;
   flagged: boolean;
   edited: boolean;
   dirtyFields: FieldKey[];

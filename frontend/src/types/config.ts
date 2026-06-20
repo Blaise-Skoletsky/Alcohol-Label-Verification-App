@@ -5,6 +5,7 @@ export type AppConfig = {
   providerMode: string;
   environment: string;
   demoBatchManifestUrl: string | null;
+  tutorialVideoUrl: string | null;
 };
 
 export type ConfigResponse = Partial<{
@@ -14,6 +15,7 @@ export type ConfigResponse = Partial<{
   provider_mode: string;
   environment: string;
   demo_batch_manifest_url: string | null;
+  tutorial_video_url: string | null;
 }>;
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -23,4 +25,5 @@ export const DEFAULT_CONFIG: AppConfig = {
   providerMode: "local",
   environment: "development",
   demoBatchManifestUrl: null,
+  tutorialVideoUrl: null,
 };

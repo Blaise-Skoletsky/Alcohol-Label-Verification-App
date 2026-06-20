@@ -1,27 +1,32 @@
-# Local Startup Guide
+# Startup Guide
 
-This guide runs the Alcohol Label Verification app locally without an OpenRouter API key. The app still needs a local OpenAI-compatible vision model endpoint for real verification.
+This guide has two decisions:
 
-## What Runs Locally
+1. Choose a model provider path:
+   - [OpenRouter](#path-a-openrouter-provider) if you have an OpenRouter API key.
+   - [Local Ollama](#path-b-local-ollama-provider) if you want to run without an
+     API key.
+2. Choose an app startup path:
+   - [Docker startup](#path-1-docker-startup) for the simplest app run.
+   - [Individual startup](#path-2-individual-backend-and-frontend-startup) when
+     you want separate backend and frontend dev servers.
 
-- FastAPI backend and React frontend run in the app Docker container.
-- A separate local vision model server provides the LLM endpoint.
-- The browser calls only the FastAPI backend.
-- The backend calls the local model server through `LOCAL_MODEL_BASE_URL`.
+The browser always calls the FastAPI backend. The frontend never calls
+OpenRouter, Ollama, or any model provider directly.
 
 ## Requirements
 
-- Docker Desktop
 - Git
-- A local OpenAI-compatible vision model server
-- Enough RAM/VRAM for the selected vision model
+- Docker Desktop, if using the Docker startup path
+- Python 3.12, if using the individual backend startup path
+- Node.js 22, if using the individual frontend startup path
+- An OpenRouter API key for the OpenRouter provider path, or Ollama for the local
+  provider path
 
-For practical batch uploads, use a machine with an NVIDIA GPU. CPU-only local vision inference may work for tiny tests, but it will be slow for real batches.
-
-## 1. Clone And Enter The Repo
+Clone and enter the repo:
 
 ```powershell
-git clone <repo-url>
+git clone YOUR_REPO_URL
 cd Alcohol-Label-Verification-App
 ```
 
@@ -31,32 +36,80 @@ If the repo is already cloned:
 cd C:\Users\Blaise\Documents\GitHub\Alcohol-Label-Verification-App
 ```
 
-## 2. Start A Local Vision Model Server
+Do not commit your `.env` file.
 
-Use a server that exposes an OpenAI-compatible `/v1/chat/completions` endpoint and supports image input.
+## Path A: OpenRouter Provider (What deployed URL uses)
 
-Recommended model:
+Use this path when you have an OpenRouter API key and want the backend to call
+OpenRouter. Openrouter uses powerful models that are able to pass the <5 second criteria. 
+
+Add the following environment variables to your .env. Copy them from the .env.example. 
+
+```env
+PROVIDER_MODE=openrouter
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL_PRIMARY=google/gemini-3.1-flash-lite-preview
+OPENROUTER_MODEL_FALLBACKS=google/gemini-2.5-flash-lite,google/gemini-2.5-flash
+OPENROUTER_TIMEOUT_SECONDS=45
+```
+
+Notes:
+- The selected models are not free, the openrouter API key will need credits loaded to run.
+- `OPENROUTER_API_KEY` is required for this path.
+- The model variables are optional, but setting them makes the selected model
+  order explicit.
+- `OPENROUTER_TIMEOUT_SECONDS` is the timeout variable currently passed by
+  `docker-compose.yml`.
+
+For individual backend startup, `PROVIDER_TIMEOUT_SECONDS=45` also works because
+the backend reads the `.env` file directly.
+
+## Path B: Local Ollama Provider
+
+Use this path when you want to run without an OpenRouter API key. The app still
+needs a local OpenAI-compatible vision model endpoint. Processing time is much slower than with openrouter. Not recommended for any cloud deployments.
+
+### 1. Install Ollama
+
+Official downloads:
+
+- Windows: <https://ollama.com/download/windows>
+- macOS: <https://ollama.com/download/mac>
+- Linux: <https://ollama.com/download/linux>
+
+Windows PowerShell install command from Ollama:
+
+```powershell
+irm https://ollama.com/install.ps1 | iex
+```
+
+Linux install command from Ollama:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+After installation, confirm Ollama is available:
+
+```powershell
+ollama --version
+```
+
+### 2. Pull A Vision Model
+
+Recommended local model:
 
 ```text
 Qwen/Qwen2.5-VL-7B-Instruct
 ```
 
-The app default model name is:
-
-```text
-qwen2.5-vl-7b-instruct
-```
-
-The easiest tested local option is Ollama:
-
-1. Install Ollama.
-2. Pull the Qwen vision model:
+Pull it with Ollama:
 
 ```powershell
 ollama pull qwen2.5vl:latest
 ```
 
-3. Create an app-specific alias with a larger context window:
+Create an app-specific alias with a larger context window:
 
 ```powershell
 $modelfile = Join-Path $env:TEMP 'alv-qwen2.5vl.Modelfile'
@@ -68,51 +121,50 @@ ollama create qwen2.5vl-alv:latest -f $modelfile
 Remove-Item -LiteralPath $modelfile -Force
 ```
 
-The larger context window matters because label artwork plus structured application
-data and the verification prompt can exceed Ollama's default context size.
+The larger context window matters because label artwork plus structured
+application data and the verification prompt can exceed Ollama's default context
+size.
 
-Alternative local option: LM Studio.
+Confirm the model exists:
 
-1. Install LM Studio.
-2. Download a Qwen 2.5 VL instruct model that your machine can run.
-3. Start LM Studio's local server.
-4. Confirm the server exposes an OpenAI-compatible chat completions endpoint.
-
-Common local server URLs:
-
-```text
-http://localhost:1234/v1/chat/completions
-http://127.0.0.1:1234/v1/chat/completions
-http://localhost:11434/v1/chat/completions
+```powershell
+ollama list
 ```
 
-When the app runs inside Docker and the model server runs on the Windows host, use:
+### 3. Configure Local Provider Mode
 
-```text
-http://host.docker.internal:11434/v1/chat/completions
-```
-
-## 3. Configure Local Mode
-
-Create a `.env` file in the repo root:
+Use this `.env` when running the app through Docker:
 
 ```env
 PROVIDER_MODE=local
 LOCAL_MODEL_BASE_URL=http://host.docker.internal:11434/v1/chat/completions
 LOCAL_MODEL_NAME=qwen2.5vl-alv:latest
-PROVIDER_TIMEOUT_SECONDS=240
-BATCH_CONCURRENCY=1
+OPENROUTER_TIMEOUT_SECONDS=240
 ```
 
-For a GPU-backed local model server, you can raise concurrency after a successful small test:
+Use this `.env` when running the backend directly on your machine:
 
 ```env
-BATCH_CONCURRENCY=2
+PROVIDER_MODE=local
+LOCAL_MODEL_BASE_URL=http://localhost:11434/v1/chat/completions
+LOCAL_MODEL_NAME=qwen2.5vl-alv:latest
+PROVIDER_TIMEOUT_SECONDS=240
 ```
 
-Do not start high. Increase only after watching memory use and latency.
+For local models, start with low concurrency. CPU-only local vision inference may
+work for tiny tests, but it will be slow for real batches. A GPU-backed machine
+is strongly preferred for practical batch uploads.
 
-## 4. Build And Start The App
+## Path 1: Docker Startup (Preferred)
+
+Use this path after choosing either the OpenRouter `.env` or the local Ollama
+`.env` above. Docker starts the FastAPI backend and serves the built React
+frontend from the same app container.
+
+For the local Ollama provider path, Ollama runs separately on your host machine.
+The Docker app container reaches it through `host.docker.internal`.
+
+Start the app:
 
 ```powershell
 docker compose up --build
@@ -124,118 +176,59 @@ Open:
 http://localhost:8000
 ```
 
-Health check:
+Stop the app:
+
+```powershell
+docker compose down
+```
+
+Stop Ollama separately if you started it for the local provider path.
+
+## Path 2: Individual Backend And Frontend Startup
+
+Use this path when you want the backend and frontend running as separate dev
+servers. The frontend dev server proxies `/api` requests to
+`http://localhost:8000`.
+
+### 1. Start The Backend
+
+Run these commands from the repo root:
+
+```powershell
+python -m venv backend\.venv
+.\backend\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e .\backend
+python -m uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
+```
+
+Leave that terminal running.
+
+Backend health check:
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/api/health | ConvertTo-Json -Compress
 ```
 
-Config check:
+### 2. Start The Frontend
+
+Open a second terminal in the repo route:
 
 ```powershell
-Invoke-RestMethod http://localhost:8000/api/config | ConvertTo-Json -Compress
+cd frontend
+npm install
+npm run dev
 ```
 
-Expected config includes:
-
-```json
-{"provider_mode":"local"}
-```
-
-## 5. Try A Small Upload First
-
-Before testing a large batch:
-
-1. Upload one PNG or JPG label image.
-2. Fill out the application-text fields: brand name, class/type designation,
-   alcohol content when required, net contents, name/address, and import country
-   of origin when applicable.
-3. Confirm the result completes.
-4. Check the app logs if the result is a processing error.
-
-Logs:
-
-```powershell
-docker compose logs app --tail=120
-```
-
-## 6. Run Batch Upload
-
-Start with a small batch:
+Open:
 
 ```text
-5-10 files
+http://localhost:5173
 ```
 
-Then increase gradually.
-
-Batch behavior is controlled by:
-
-```env
-MAX_BATCH_COUNT=400
-BATCH_CONCURRENCY=1
-```
-
-`MAX_BATCH_COUNT` controls how many verification items the app accepts in one batch.
-
-`BATCH_CONCURRENCY` controls how many model calls run at the same time. For local models, this is the setting most likely to overload the machine.
-
-Suggested values:
-
-```text
-CPU-only: 1
-Small GPU: 1-2
-Large GPU: 2-5
-```
-
-## 7. Stop The App
-
-```powershell
-docker compose down
-```
-
-Stop the local model server separately in LM Studio or whichever model runtime you are using.
-
-## Troubleshooting
-
-### The App Cannot Reach The Model
-
-Use `host.docker.internal` instead of `localhost` in `.env`:
-
-```env
-LOCAL_MODEL_BASE_URL=http://host.docker.internal:1234/v1/chat/completions
-```
-
-Inside the app container, `localhost` means the app container itself, not the Windows host.
-
-### Batch Items Fail With Processing Errors
-
-Reduce concurrency:
-
-```env
-BATCH_CONCURRENCY=1
-```
-
-Increase timeout:
-
-```env
-PROVIDER_TIMEOUT_SECONDS=180
-```
-
-Restart:
-
-```powershell
-docker compose down
-docker compose up --build
-```
 
 ### The Model Rejects Images
 
-The selected model server must support vision inputs through OpenAI-compatible message content. Text-only local models will not work for label verification.
-
-## Current Local-Mode Limits
-
-- No API key is required.
-- A local model server is required.
-- PNG/JPG are the reliable local input types.
-- Batch upload works through the app, but throughput depends on local hardware and `BATCH_CONCURRENCY`.
+The selected local model server must support vision inputs through
+OpenAI-compatible message content. Text-only local models will not work for label
+verification.

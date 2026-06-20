@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 
 type TutorialModalProps = {
+  videoUrl: string;
   onClose: () => void;
 };
 
-export function TutorialModal({ onClose }: TutorialModalProps) {
+export function TutorialModal({ videoUrl, onClose }: TutorialModalProps) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -33,8 +34,9 @@ export function TutorialModal({ onClose }: TutorialModalProps) {
           </button>
         </div>
         <div style={{ background: "#000" }}>
-          <video controls playsInline poster="/tutorial-poster.png" className="tutorial-video">
-            <source src="/tutorial.mp4" type="video/mp4" />
+          <video controls playsInline className="tutorial-video">
+            <source src={videoUrl} type="video/mp4" />
+            Your browser does not support this video.
           </video>
         </div>
       </div>

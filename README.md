@@ -1,108 +1,100 @@
 # Alcohol Label Verification App
 
-Prototype scaffold for an AI-powered alcohol label verification app.
+## Introduction
 
-The primary workflow is a structured verification item: the user uploads one
-label-artwork image and enters the application data as text fields. The backend
-passes the label image plus those text values into the configured vision model and
-compares what is printed on the label against the submitted values. A verification
-request must include both the label photo and the required text fields.
+This is my submission for the Treasury take-home test.
 
-## Current Verification Contract
+The application is a prototype for checking alcohol label artwork against
+structured application data. It is not meant to be a final legal approval system.
+The goal is to show the product approach: what inputs I chose, what I decided not
+to support, and how I balanced speed, accuracy, and usability.
 
-Each verification item has one uploaded PNG or JPG label image plus hard text
-inputs for:
+## Tradeoffs
+
+The main tension during development was balancing two things:
+
+- Speed and accuracy.
+- A simple UI/UX while still keeping the workflow powerful enough for real review
+  work.
+
+The first major design decision was the input format. When I started, I was
+scraping the COLA site for labels and applications. In those scraped examples,
+the label and application often appeared together in one combined image. My first
+idea was to let users upload that single combined image and have the model pull
+out both the application text and the label text, then compare the two.
+
+That approach had some appeal. It felt native to the way the COLA source data was
+already presented, and it would make batch upload very easy: users could upload a
+large set of images without matching each label to a separate text record or
+second image.
+
+I moved away from that approach for two reasons. First, it did not seem aligned
+with what the take-home assessment was asking for. Second, those scraped combined
+images came from a place where the application and label were already matched.
+That is not necessarily the real user workflow. If a user did not already have
+the two documents joined together, asking them to create a combined screenshot
+would add friction and create a new source of errors.
+
+The current design uses one label image plus structured application fields. The
+tradeoff is that batch upload becomes harder. For a single label, the form is
+clear and easy to use. For 300 labels, nobody wants to type all of that
+application data by hand.
+
+That led to the second design decision: whether to support spreadsheet upload. I
+initially considered a spreadsheet where each row had application fields and a
+file path linking to the matching label image. I decided against making that the
+primary workflow because it is less approachable. A spreadsheet introduces schema
+errors, missing columns, file path mistakes, and the extra burden of matching
+uploaded images to text rows. That is powerful, but it is not the most intuitive
+first experience for a non-technical reviewer.
+
+If I were extending this product, I would support both workflows: a simple guided
+form for manual review, and a spreadsheet-based batch path with a better mapping
+step between rows and selected files. I did not build the full spreadsheet path
+because I wanted to avoid complicating the prototype with extra controls and
+branching workflows. The current flow is intentionally consolidated: select label
+images, enter the required application details, verify, and inspect the result.
+
+The third major decision was model execution. I knew the extraction and
+comparison step would use a vision-capable LLM. For a hosted environment, current
+vision LLM's are cheap, fast and accurate. 
+
+Local execution was the harder tradeoff. I wanted the app to be runnable without
+an OpenRouter key, so I added a local provider path through Ollama. The downside
+is that local verification is slower and less accurate, depending heavily on the
+machine and model. I am comfortable with that tradeoff because local mode is
+mainly for demonstration. The deployed path can optimize for both
+speed and quality by using stronger hosted models.
+
+## Label Requirements
+
+Sources and more detail about label and application requirements are described
+in [docs/assumptions.md](docs/assumptions.md).
 
 - Brand name
-- Class/type designation
-- Alcohol content, when required for the beverage class
+- Beverage class and class/type designation
+- Alcohol content when required by beverage class and trigger fields
 - Net contents
-- Name and address of bottler/producer
-- Country of origin for imports
+- Name and address of producer, bottler, importer, or similar responsible party
+- Country of origin for imported products
+- Malt beverage color additive disclosure when applicable
+- Government Health Warning Statement as a strict label-only check
 
-The Government Health Warning Statement is not compared to a user-entered value.
-It is a label-only compliance check. The label must show the exact federal warning
-statement, the visible prefix `GOVERNMENT WARNING:` must be all caps and visibly
-bold, and approximate wording, title-case headings, missing text, or unreadable
-warning text must fail.
+## Design And Proposal
 
-Each verification currently fans out into three parallel model calls for one
-image: warning/legibility, product fields, and origin fields. The backend then
-merges those specialist results into the existing response shape and applies the
-result guard before returning the final pass/fail status.
+The design docs are split by purpose:
 
-Most other fields require compliance judgment rather than blind string matching.
-For example, capitalization and punctuation-only differences in a brand name can
-pass when the wording is substantively the same. The government warning is the
-exception: it has no tolerance for wording or capitalization changes.
+- [docs/proposal.md](docs/proposal.md) explains the product goals, invariants,
+  architecture posture, security assumptions, and what the prototype is trying
+  to prove.
+- [docs/design.md](docs/design.md) describes runtime behavior: request flow, UI
+  behavior, batch processing, model-provider strategy, failover expectations, and
+  Azure-style deployment mechanics.
+- [docs/assumptions.md](docs/assumptions.md) captures the working assumptions
+  for verification logic.
 
-## Stack
+## Running Locally
 
-- Backend: FastAPI
-- Frontend: React + TypeScript + Vite
-- Runtime: single Docker container
-- Deployment target: Azure App Service for Linux
-
-## Local Docker Run
-
-The default provider mode is `local`. A local run needs an OpenAI-compatible vision model server unless `.env` switches `PROVIDER_MODE=openrouter`.
-
-```powershell
-docker compose up --build
-```
-
-Open:
-
-- App: http://localhost:8000
-- Health: http://localhost:8000/api/health
-
-## Local Development
-
-Backend:
-
-```powershell
-cd backend
-python -m pip install -e ".[dev]"
-python -m uvicorn app.main:app --reload
-```
-
-Frontend:
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-## Model Provider Modes
-
-The app defaults to `PROVIDER_MODE=local`. Use `LOCAL_MODEL_BASE_URL` and `LOCAL_MODEL_NAME` to point the backend at a real local OpenAI-compatible vision model server.
-
-Use `PROVIDER_MODE=openrouter` with `OPENROUTER_API_KEY` to call OpenRouter from the backend. The frontend never receives provider credentials and never calls model providers directly.
-
-## Azure Demo Deployment
-
-See [docs/azure-app-service.md](docs/azure-app-service.md) for the Azure App Service setup and GitHub Actions deployment flow.
-
-The production Azure deployment can expose a hosted sample batch upload. When `ENVIRONMENT=production` and `DEMO_BATCH_MANIFEST_URL` points at the Azure Blob manifest, the sidebar shows `Load sample batch` and pre-fills the batch spreadsheet from the hosted CSV and image blobs. This button is intentionally hidden outside production.
-
-## Assumptions
-
-See [docs/assumptions.md](docs/assumptions.md) for the rollout assumptions.
-
-Key assumptions:
-
-- Preferred demo path is online hosting through Azure App Service.
-- The same app must be easy to run locally if Treasury network policy or cloud access blocks the hosted demo.
-- The frontend never calls OpenRouter, local model servers, or any model provider directly.
-- The frontend only calls the FastAPI backend.
-- Local mode is the default runtime path. OpenRouter is the cloud/demo provider when `PROVIDER_MODE=openrouter` is configured.
-- `.env` is required only when enabling OpenRouter or other real credentials.
-
-## Storage Posture
-
-The current scaffold is stateless. It does not store uploaded label artwork or submitted application text on the server or in cloud storage. Future recent-history behavior should be browser-local unless server-side retention is explicitly added.
-
-## Future Production Improvements
-
-- Consider direct COLA imports or structured metadata ingestion in addition to manual application-data entry. This is not in scope for the immediate prototype, but it may be useful if the app is productionalized.
+Use [docs/startup.md](docs/startup.md) for the full local startup guide. If you
+run the setup with Ollama, verification will be slower than in the deployed
+environment.

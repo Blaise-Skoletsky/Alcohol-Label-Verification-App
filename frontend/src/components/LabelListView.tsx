@@ -125,7 +125,7 @@ export function LabelListView({
                 </span>
               </span>
 
-              <span className="updated-cell">{row.updatedAtLabel}</span>
+              <span className="updated-cell">{row.modifiedAtLabel}</span>
               <span className="row-action-cell">
                 <button
                   type="button"

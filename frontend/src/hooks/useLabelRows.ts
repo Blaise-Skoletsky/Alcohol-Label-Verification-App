@@ -10,7 +10,13 @@ import { formatTimestamp } from "../lib/format";
 import { normalizeResultCore } from "../lib/resultNormalization";
 import { findArray, findRecord, findString } from "../lib/objectLookup";
 import { normalizeStatus } from "../lib/status";
-import type { BeverageClass, FieldKey, LabelRow, UiStatus } from "../types/verification";
+import type {
+  BeverageClass,
+  FieldKey,
+  FieldSummary,
+  LabelRow,
+  UiStatus,
+} from "../types/verification";
 
 let rowCounter = 0;
 
@@ -40,8 +46,12 @@ export type NewRowInput = Partial<
 >;
 
 export function makeRow(input: NewRowInput = {}): LabelRow {
+  const localId = nextId();
+  const createdAtMs = Date.now();
   return {
-    localId: nextId(),
+    localId,
+    createdAtMs,
+    createdOrder: rowCounter,
     brand: input.brand ?? "",
     beverageClass: input.beverageClass ?? "spirits",
     classType: input.classType ?? "",
@@ -58,8 +68,10 @@ export function makeRow(input: NewRowInput = {}): LabelRow {
     status: "draft",
     fields: null,
     summary: "Not verified yet.",
-    updatedAtMs: 0,
-    updatedAtLabel: "—",
+    modifiedAtMs: createdAtMs,
+    modifiedAtLabel: formatTimestamp(createdAtMs),
+    verificationStartedAtMs: null,
+    verificationCompletedAtMs: null,
     flagged: input.flagged ?? false,
     edited: false,
     dirtyFields: [],
@@ -155,12 +167,14 @@ export function useLabelRows(notify: Notify) {
   }
 
   function editRow(id: string, patch: NewRowInput) {
+    const modified = modificationPatch();
     setRows((current) =>
       current.map((row) =>
         row.localId === id
           ? {
               ...row,
               ...patch,
+              ...modified,
               edited: true,
               dirtyFields: mergeDirtyFields(row.dirtyFields ?? [], dirtyFieldKeysForPatch(patch)),
             }
@@ -170,6 +184,7 @@ export function useLabelRows(notify: Notify) {
   }
 
   function attachImage(id: string, file: File) {
+    const modified = modificationPatch();
     setRows((current) =>
       current.map((row) => {
         if (row.localId !== id) return row;
@@ -181,6 +196,7 @@ export function useLabelRows(notify: Notify) {
           fileName: file.name,
           sampleUrl: null,
           flagged: false,
+          ...modified,
           edited: true,
         };
       }),
@@ -252,8 +268,9 @@ export function useLabelRows(notify: Notify) {
     patchRow(id, {
       status: "processing",
       summary: "Verifying this label…",
-      updatedAtMs,
-      updatedAtLabel: formatTimestamp(updatedAtMs),
+      modifiedAtMs: updatedAtMs,
+      modifiedAtLabel: formatTimestamp(updatedAtMs),
+      verificationStartedAtMs: updatedAtMs,
       edited: false,
       dirtyFields: [],
     });
@@ -264,8 +281,9 @@ export function useLabelRows(notify: Notify) {
         status: core.status,
         fields: core.fields,
         summary: core.summary,
-        updatedAtMs: core.updatedAtMs,
-        updatedAtLabel: core.updatedAtLabel,
+        modifiedAtMs: core.updatedAtMs,
+        modifiedAtLabel: core.updatedAtLabel,
+        verificationCompletedAtMs: core.updatedAtMs,
         serverId: findString(payload, ["item_id", "id"]) ?? row.serverId,
       });
     } catch (error) {
@@ -273,8 +291,9 @@ export function useLabelRows(notify: Notify) {
       patchRow(id, {
         status: "processing-error",
         summary: friendlyError(error, "We could not verify this label. Please try again."),
-        updatedAtMs,
-        updatedAtLabel: formatTimestamp(updatedAtMs),
+        modifiedAtMs: updatedAtMs,
+        modifiedAtLabel: formatTimestamp(updatedAtMs),
+        verificationCompletedAtMs: updatedAtMs,
       });
     }
   }
@@ -309,8 +328,9 @@ export function useLabelRows(notify: Notify) {
               ...row,
               status: "processing",
               summary: "Verifying…",
-              updatedAtMs,
-              updatedAtLabel: formatTimestamp(updatedAtMs),
+              modifiedAtMs: updatedAtMs,
+              modifiedAtLabel: formatTimestamp(updatedAtMs),
+              verificationStartedAtMs: updatedAtMs,
               edited: false,
               dirtyFields: [],
             }
@@ -346,8 +366,9 @@ export function useLabelRows(notify: Notify) {
                 ...row,
                 status: "processing-error",
                 summary: friendlyError(error, "We could not start the batch."),
-                updatedAtMs,
-                updatedAtLabel: formatTimestamp(updatedAtMs),
+                modifiedAtMs: updatedAtMs,
+                modifiedAtLabel: formatTimestamp(updatedAtMs),
+                verificationCompletedAtMs: updatedAtMs,
               }
             : row,
         ),
@@ -378,13 +399,18 @@ export function useLabelRows(notify: Notify) {
           const result = findRecord(item, ["result"]);
           if (result) {
             const core = normalizeResultCore(result);
+            const resultChanged = hasResultChanged(row, core.status, core.summary, core.fields);
+            const modifiedAtMs = resultChanged ? core.updatedAtMs : row.modifiedAtMs;
             return {
               ...row,
               status: core.status,
               fields: core.fields,
               summary: core.summary,
-              updatedAtMs: core.updatedAtMs,
-              updatedAtLabel: core.updatedAtLabel,
+              modifiedAtMs,
+              modifiedAtLabel: resultChanged ? core.updatedAtLabel : row.modifiedAtLabel,
+              verificationCompletedAtMs: resultChanged
+                ? core.updatedAtMs
+                : row.verificationCompletedAtMs,
             };
           }
           return { ...row, status: mapItemStatus(findString(item, ["status"])) };
@@ -428,6 +454,13 @@ function friendlyError(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function modificationPatch(atMs = Date.now()): Pick<LabelRow, "modifiedAtMs" | "modifiedAtLabel"> {
+  return {
+    modifiedAtMs: atMs,
+    modifiedAtLabel: formatTimestamp(atMs),
+  };
+}
+
 function dirtyFieldKeysForPatch(patch: NewRowInput): FieldKey[] {
   const keys = new Set<FieldKey>();
   if ("brand" in patch) keys.add("brand_name");
@@ -449,6 +482,20 @@ function dirtyFieldKeysForPatch(patch: NewRowInput): FieldKey[] {
 function mergeDirtyFields(current: FieldKey[], next: FieldKey[]): FieldKey[] {
   if (next.length === 0) return current;
   return [...new Set([...current, ...next])];
+}
+
+function hasResultChanged(
+  row: LabelRow,
+  status: UiStatus,
+  summary: string,
+  fields: FieldSummary[],
+): boolean {
+  return row.status !== status || row.summary !== summary || !sameFields(row.fields, fields);
+}
+
+function sameFields(current: FieldSummary[] | null, next: FieldSummary[]): boolean {
+  if (!current || current.length !== next.length) return false;
+  return JSON.stringify(current) === JSON.stringify(next);
 }
 
 export const BEVERAGE_CLASS_LABELS: Record<BeverageClass, string> = {

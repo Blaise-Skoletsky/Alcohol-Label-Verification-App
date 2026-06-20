@@ -5,6 +5,7 @@ import { LabelListView } from "./components/LabelListView";
 import { SamplePickerModal } from "./components/SamplePickerModal";
 import { Sidebar } from "./components/Sidebar";
 import { TutorialModal } from "./components/TutorialModal";
+import { useAppConfig } from "./hooks/useAppConfig";
 import { makeRow, useLabelRows } from "./hooks/useLabelRows";
 import { loadDemoBatchRows, type DemoBatchGridRow } from "./lib/demoBatch";
 import type { SampleEntry } from "./generated/sampleLabels";
@@ -33,11 +34,22 @@ function matchesSearch(row: LabelRow, query: string): boolean {
 }
 
 function compareUpdatedRows(a: LabelRow, b: LabelRow, direction: SortDirection): number {
-  const aHasDate = a.updatedAtMs > 0;
-  const bHasDate = b.updatedAtMs > 0;
+  const aHasDate = a.modifiedAtMs > 0;
+  const bHasDate = b.modifiedAtMs > 0;
   if (aHasDate !== bHasDate) return aHasDate ? -1 : 1;
-  if (!aHasDate && !bHasDate) return 0;
-  return direction === "asc" ? a.updatedAtMs - b.updatedAtMs : b.updatedAtMs - a.updatedAtMs;
+  if (aHasDate && bHasDate && a.modifiedAtMs !== b.modifiedAtMs) {
+    return direction === "asc" ? a.modifiedAtMs - b.modifiedAtMs : b.modifiedAtMs - a.modifiedAtMs;
+  }
+  return a.createdOrder - b.createdOrder;
+}
+
+function isEmptyManualDraft(row: LabelRow): boolean {
+  if (row.status !== "draft" || row.edited) return false;
+  if (row.imageFile || row.imageUrl || row.sampleUrl) return false;
+
+  return [row.brand, row.classType, row.abv, row.net, row.nameAddr, row.country, row.fileName].every(
+    (value) => value.trim().length === 0,
+  );
 }
 
 function entryToRow(entry: SampleEntry): LabelRow {
@@ -61,9 +73,11 @@ function entryToRow(entry: SampleEntry): LabelRow {
 }
 
 export function App() {
+  const { config } = useAppConfig();
   const [toast, setToast] = useState("");
   const toastBelowModal = /^Loaded \d+ hosted sample rows\./.test(toast);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tutorialRequestHandled = useRef(false);
 
   function notify(message: string) {
     setToast(message);
@@ -91,6 +105,7 @@ export function App() {
   const [updatedSortDirection, setUpdatedSortDirection] = useState<SortDirection>("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [manualDraftIds, setManualDraftIds] = useState<Set<string>>(new Set());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [batchPhotos, setBatchPhotos] = useState<File[] | null>(null);
   const [demoBatchRows, setDemoBatchRows] = useState<DemoBatchGridRow[] | null>(null);
@@ -99,13 +114,24 @@ export function App() {
 
   useEffect(() => {
     try {
-      if (/tutorial/i.test(location.hash) || /[?&]tutorial(=|&|$)/i.test(location.search)) {
+      if (tutorialRequestHandled.current) return;
+      const tutorialRequested =
+        /tutorial/i.test(location.hash) || /[?&]tutorial(=|&|$)/i.test(location.search);
+      if (!tutorialRequested) {
+        tutorialRequestHandled.current = true;
+        return;
+      }
+      if (
+        config.environment.toLowerCase() === "production" &&
+        config.tutorialVideoUrl
+      ) {
         setTutorialOpen(true);
+        tutorialRequestHandled.current = true;
       }
     } catch {
       // ignore
     }
-  }, []);
+  }, [config.environment, config.tutorialVideoUrl]);
 
   const visibleRows = useMemo(() => {
     const filteredRows = rows
@@ -178,6 +204,11 @@ export function App() {
       const targetIds = new Set(ids);
       return new Set([...current].filter((id) => !targetIds.has(id)));
     });
+    setManualDraftIds((current) => {
+      const targetIds = new Set(ids);
+      const next = new Set([...current].filter((id) => !targetIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
     if (detailId && ids.includes(detailId)) setDetailId(null);
   }
 
@@ -229,8 +260,23 @@ export function App() {
     if (next) setDetailId(next.localId);
   }
 
+  function closeDetail() {
+    const manualRows = rows.filter((row) => manualDraftIds.has(row.localId));
+    if (manualRows.length > 0) {
+      const manualRowIds = new Set(manualRows.map((row) => row.localId));
+      const emptyIds = manualRows.filter(isEmptyManualDraft).map((row) => row.localId);
+      setManualDraftIds((current) => {
+        const next = new Set([...current].filter((id) => !manualRowIds.has(id)));
+        return next;
+      });
+      clearRows(emptyIds);
+    }
+    setDetailId(null);
+  }
+
   function openAddLabel() {
     const id = addBlankRow();
+    setManualDraftIds((current) => new Set(current).add(id));
     setDetailId(id);
   }
 
@@ -290,6 +336,7 @@ export function App() {
     <>
       <div className="app-shell">
         <Sidebar
+          config={config}
           onAddLabel={openAddLabel}
           onBatchUpload={startBatchUpload}
           onUseSamples={() => setPickerOpen(true)}
@@ -318,8 +365,8 @@ export function App() {
                   <input
                     type="text"
                     className="table-search-input"
-                    aria-label="Filter labels by brand, name, or file name"
-                    placeholder="Filter labels"
+                    aria-label="Search Applications"
+                    placeholder="Search Applications"
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                   />
@@ -405,7 +452,7 @@ export function App() {
           row={detailRow}
           index={detailIndex}
           total={visibleRows.length}
-          onClose={() => setDetailId(null)}
+          onClose={closeDetail}
           onPrev={() => moveDetail(-1)}
           onNext={() => moveDetail(1)}
           onEdit={editRow}
@@ -441,7 +488,12 @@ export function App() {
         />
       ) : null}
 
-      {tutorialOpen ? <TutorialModal onClose={() => setTutorialOpen(false)} /> : null}
+      {tutorialOpen && config.tutorialVideoUrl ? (
+        <TutorialModal
+          videoUrl={config.tutorialVideoUrl}
+          onClose={() => setTutorialOpen(false)}
+        />
+      ) : null}
 
       {toast ? (
         <div className={`toast${toastBelowModal ? " toast-below-modal" : ""}`}>

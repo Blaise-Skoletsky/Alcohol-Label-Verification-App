@@ -233,6 +233,7 @@ def test_config_endpoint_exposes_safe_limits() -> None:
     assert body["provider_mode"] == "local"
     assert body["environment"] == "development"
     assert body["demo_batch_manifest_url"] is None
+    assert body["tutorial_video_url"] is None
     assert body["max_batch_labels"] == 350
     assert ".png" in body["allowed_file_types"]
     assert ".pdf" not in body["allowed_file_types"]
@@ -246,6 +247,7 @@ def test_config_endpoint_exposes_demo_manifest_only_in_production() -> None:
         provider_mode="local",
         environment="development",
         demo_batch_manifest_url="https://example.test/manifest.json",
+        tutorial_video_url="https://example.test/tutorial.mp4",
     )
     client = TestClient(app)
 
@@ -255,11 +257,13 @@ def test_config_endpoint_exposes_demo_manifest_only_in_production() -> None:
     body = response.json()
     assert body["environment"] == "development"
     assert body["demo_batch_manifest_url"] is None
+    assert body["tutorial_video_url"] is None
 
     app.dependency_overrides[get_settings] = lambda: Settings(
         provider_mode="local",
         environment="production",
         demo_batch_manifest_url="https://example.test/manifest.json",
+        tutorial_video_url="https://example.test/tutorial.mp4",
     )
 
     response = client.get("/api/config")
@@ -268,6 +272,7 @@ def test_config_endpoint_exposes_demo_manifest_only_in_production() -> None:
     body = response.json()
     assert body["environment"] == "production"
     assert body["demo_batch_manifest_url"] == "https://example.test/manifest.json"
+    assert body["tutorial_video_url"] == "https://example.test/tutorial.mp4"
     app.dependency_overrides.clear()
 
 
