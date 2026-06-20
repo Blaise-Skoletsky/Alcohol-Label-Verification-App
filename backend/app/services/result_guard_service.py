@@ -9,7 +9,9 @@ from app.models.verification import (
 from app.providers.base import ProviderResult
 
 
-GOVERNMENT_WARNING_PREFIX = "GOVERNMENT WARNING:"
+GOVERNMENT_WARNING_HEADING = "GOVERNMENT WARNING"
+GOVERNMENT_WARNING_PREFIX = f"{GOVERNMENT_WARNING_HEADING}:"
+GOVERNMENT_WARNING_HEADING_PATTERN = re.compile(r"\bGOVERNMENT\s+WARNING\b\s*:?\s*")
 GOVERNMENT_WARNING_BODY = (
     "(1) According to the Surgeon General, women should not drink alcoholic beverages "
     "during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic "
@@ -86,19 +88,19 @@ class ResultGuardService:
             return field
 
         label_value = field.label_value or ""
-        if GOVERNMENT_WARNING_PREFIX not in label_value:
+        heading_match = GOVERNMENT_WARNING_HEADING_PATTERN.search(label_value)
+        if not heading_match:
             return field.model_copy(
                 update={
                     "status": "fail",
                     "reason": (
-                        "Government warning can pass only when the prefix "
-                        "'GOVERNMENT WARNING:' is visible in all caps."
+                        "Government warning can pass only when the heading words "
+                        "'GOVERNMENT WARNING' are visible in all caps."
                     ),
                 }
             )
 
-        after_prefix = label_value.split(GOVERNMENT_WARNING_PREFIX, 1)[1]
-        body = after_prefix.strip()
+        body = label_value[heading_match.end():].strip()
         if not self._normalized_warning_body_matches(body):
             return field.model_copy(
                 update={
@@ -311,13 +313,13 @@ class ResultGuardService:
                     f"'{expected_token}'; label shows '{actual[index]}'."
                 )
         return (
-            "Government warning can pass only when the exact federal warning text "
-            "is visible word-for-word with no missing or changed words."
+            "Government warning can pass only when the required federal warning words "
+            "are visible in order with no missing or changed words."
         )
 
     def _warning_tokens(self, value: str) -> list[str]:
         normalized = value.replace("\u00a0", " ")
-        return re.findall(r"[a-z0-9]+|[^\w\s]", normalized.lower())
+        return re.findall(r"[a-z0-9]+", normalized.lower())
 
     def _overall_status(self, fields: VerificationFields) -> VerificationStatus:
         field_statuses = [

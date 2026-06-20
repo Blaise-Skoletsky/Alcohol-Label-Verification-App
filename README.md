@@ -15,8 +15,8 @@ runtime, and OpenRouter for hosted model access.
 
 ## Demo Testing Controls
 
-The app includes two demo-marked buttons that are only there to make the
-prototype easier to test.
+The app includes two demo-marked buttons that are only there to provide sample labels
+for testing.
 
 One button creates a large spreadsheet-style batch with roughly 300 labels. I
 included this because large-batch handling was one of the requirements I wanted
@@ -27,12 +27,7 @@ pass or fail. These samples include deliberate edits and mismatches, such as
 labels where the government warning was removed or blurred, and application form
 values where the alcohol percentage does not match the label. I also included a
 few passing samples that were deliberately edited with glare or rotated labels,
-because those should still pass when the required information is visible. The
-purpose is to make the pass/fail behavior easy to inspect without manually
-assembling test data.
-
-These controls are for the take-home demo only. I would not include them as
-normal user-facing controls in a production-grade application.
+because those should still pass when the required information is visible. 
 
 ## Design Decisions
 

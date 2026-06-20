@@ -94,12 +94,13 @@ class VerificationPromptService:
             ),
             (
                 "Government warning is strict and label-only: pass only when the label shows "
-                "the exact federal warning statement word-for-word, with no missing, changed, "
-                "reordered, or paraphrased words. The prefix 'GOVERNMENT WARNING:' must be "
-                "all caps and visibly bold. For government_warning.label_value, transcribe the "
-                "full visible warning statement when it is readable; preserve the prefix letter "
-                "case exactly as printed and never rewrite a lowercase, title-case, or mixed-case "
-                "prefix into all caps."
+                "the heading words GOVERNMENT WARNING in all caps and the required federal "
+                "warning words in order, with no missing, changed, reordered, or paraphrased "
+                "words. Treat punctuation, spacing, line breaks, and the colon after WARNING "
+                "as formatting; do not fail solely because the colon is missing. For "
+                "government_warning.label_value, transcribe the full visible warning statement "
+                "as printed, preserving heading case and punctuation when visible. Never "
+                "rewrite a lowercase, title-case, or mixed-case heading into all caps."
             ),
             self._task_intro(),
             self._overall_verdict_rules(),
@@ -148,12 +149,13 @@ class VerificationPromptService:
             ),
             (
                 "Government warning is strict and label-only: pass only when the label shows "
-                "the exact federal warning statement word-for-word, with no missing, changed, "
-                "reordered, or paraphrased words. The prefix 'GOVERNMENT WARNING:' must be "
-                "all caps and visibly bold. For government_warning.label_value, transcribe the "
-                "full visible warning statement when it is readable; preserve the prefix letter "
-                "case exactly as printed and never rewrite a lowercase, title-case, or mixed-case "
-                "prefix into all caps."
+                "the heading words GOVERNMENT WARNING in all caps and the required federal "
+                "warning words in order, with no missing, changed, reordered, or paraphrased "
+                "words. Treat punctuation, spacing, line breaks, and the colon after WARNING "
+                "as formatting; do not fail solely because the colon is missing. For "
+                "government_warning.label_value, transcribe the full visible warning statement "
+                "as printed, preserving heading case and punctuation when visible. Never "
+                "rewrite a lowercase, title-case, or mixed-case heading into all caps."
             )
             if "government_warning" in requested_fields
             else "",
@@ -421,19 +423,18 @@ Required exact text:
 GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.
 
 PASS: The complete warning statement is visible/readable and matches the required
-text word-for-word, including numbering, punctuation, and every required word.
-The prefix 'GOVERNMENT WARNING:' is all caps and visibly bold. The warning body
-may be sentence case or all caps; do not fail solely because the body text is all
-caps when the words and punctuation are otherwise exact.
+words in order, including numbering and every required word. The heading words
+GOVERNMENT WARNING are all caps. The warning body may be sentence case or all
+caps. Punctuation, spacing, line breaks, and the colon after WARNING are
+formatting; do not fail solely because the colon is missing or spacing is compact.
 FAIL: Warning is absent, unreadable, partial, missing any required word, has any
-changed/reordered/paraphrased wording, has different punctuation that changes the
-required statement, has a lowercase/title-case/mixed-case prefix, lacks a visibly
-bold prefix, is hidden/covered, or is inferred from regulatory knowledge.
+changed/reordered/paraphrased wording, has a lowercase/title-case/mixed-case
+heading, is hidden/covered, or is inferred from regulatory knowledge.
 For label_value, return the full visible warning statement when readable, not
-only the heading. Preserve the visible heading case exactly as printed. If the
-image shows 'government warning:', 'Government Warning:', or any other non-exact
-case, return the full visible statement with that non-exact heading and fail the
-field."""
+only the heading. Preserve the visible heading case and punctuation exactly as
+printed. If the image shows 'government warning', 'Government Warning', or any
+other non-exact heading case, return the full visible statement with that
+non-exact heading and fail the field."""
 
     # ------------------------------------------------------------------
     # Output format

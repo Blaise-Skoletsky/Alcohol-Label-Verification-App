@@ -21,7 +21,10 @@ from app.models.verification import (
 from app.providers.openrouter_provider import OpenRouterVerificationProvider
 from app.providers.local_provider import LocalModelVerificationProvider
 from app.providers.base import ProviderError, ProviderPromptResult, ProviderResult
-from app.providers.chat_completion_parser import parse_chat_completion_response
+from app.providers.chat_completion_parser import (
+    parse_chat_completion_prompt_response,
+    parse_chat_completion_response,
+)
 from app.providers.multi_pass_provider import MultiPassVerificationProvider
 from app.services.batch_service import BatchService
 from app.services.result_guard_service import (
@@ -200,6 +203,26 @@ class SpecialistRunner:
                 attempted_models=[f"test-{prompt_name}"],
             ),
         )
+
+
+def make_prompt_response_content(requested_fields: tuple[str, ...]) -> dict:
+    fields = make_fields().model_dump()
+    return {
+        "status": "pass",
+        "summary": "Requested fields passed.",
+        "fields": {
+            field_name: fields[field_name]
+            for field_name in requested_fields
+        },
+    }
+
+
+def make_provider_response(*, json_body: dict) -> httpx.Response:
+    return httpx.Response(
+        status_code=200,
+        json=json_body,
+        request=httpx.Request("POST", "http://provider.test/chat"),
+    )
 
 
 def make_test_client() -> TestClient:
@@ -387,7 +410,31 @@ def test_openrouter_payload_sends_real_image_content() -> None:
     assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
 
 
-def test_local_provider_payload_sends_image_without_openrouter_plugins() -> None:
+def test_openrouter_payload_does_not_include_local_structured_output_fields() -> None:
+    provider = OpenRouterVerificationProvider(Settings(openrouter_api_key="test-key"))
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    payload = provider._build_payload(model="google/gemini-3.5-flash", upload=upload)
+
+    assert set(payload) == {
+        "model",
+        "messages",
+        "response_format",
+        "temperature",
+        "max_tokens",
+        "stream",
+    }
+    assert payload["response_format"] == {"type": "json_object"}
+    assert "format" not in payload
+    assert "options" not in payload
+
+
+def test_local_provider_payload_uses_ollama_native_schema_and_image() -> None:
     provider = LocalModelVerificationProvider(
         Settings(provider_mode="local", local_model_name="qwen2.5-vl-7b-instruct")
     )
@@ -397,13 +444,19 @@ def test_local_provider_payload_sends_image_without_openrouter_plugins() -> None
         extension=".png",
         content=PNG_BYTES,
     )
+    prompt = VerificationPromptService().build_specialist_prompts()[0]
 
-    payload = provider._build_payload(upload=upload)
+    payload = provider._build_payload(upload=upload, prompt=prompt)
 
-    content = payload["messages"][1]["content"]
     assert payload["model"] == "qwen2.5-vl-7b-instruct"
-    assert content[1]["type"] == "image_url"
-    assert content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert payload["messages"][0]["content"] == prompt.system_instruction
+    assert payload["messages"][1]["content"] == prompt.user_instruction
+    assert payload["messages"][1]["images"] == ["iVBORw0KGgp0ZXN0LXBuZw=="]
+    assert payload["format"]["properties"]["fields"]["required"] == list(prompt.requested_fields)
+    assert set(payload["format"]["properties"]["fields"]["properties"]) == set(
+        prompt.requested_fields
+    )
+    assert "response_format" not in payload
     assert "plugins" not in payload
 
 
@@ -442,17 +495,16 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert "application_value='N/A - text entry form'" in system_text
     assert "FIELD 1 - artifact_legibility" in system_text
     assert "decimal comma = decimal point" in system_text
-    assert "exact federal warning statement word-for-word" in system_text
-    assert "prefix 'GOVERNMENT WARNING:' must be all caps and visibly bold" in system_text
+    assert "heading words GOVERNMENT WARNING in all caps" in system_text
     assert "missing, changed, reordered, or paraphrased words" in system_text
-    assert "numbering, punctuation, and every required word" in system_text
-    assert "may be sentence case or all caps" in system_text
-    assert "when the words and punctuation are otherwise exact" in system_text
-    assert "lowercase/title-case/mixed-case prefix" in system_text
+    assert "Treat punctuation, spacing, line breaks, and the colon after WARNING" in system_text
+    assert "do not fail solely because the colon is missing" in system_text
+    assert "including numbering and every required word" in system_text
+    assert "sentence case or all" in system_text
+    assert "lowercase, title-case, or mixed-case heading" in system_text
     assert "transcribe the full visible warning statement" in system_text
-    assert "preserve the prefix letter case exactly as printed" in system_text
-    assert "never rewrite a lowercase, title-case, or mixed-case prefix into all caps" in system_text
-    assert "lacks a visibly" in system_text
+    assert "preserving heading case and punctuation when visible" in system_text
+    assert "Never rewrite a lowercase, title-case, or mixed-case heading into all caps" in system_text
     assert "inferred from" in system_text
     assert "regulatory knowledge" in system_text
     assert "Review the attached label artwork image using the system rules." in user_text
@@ -460,6 +512,196 @@ def test_openrouter_payload_uses_shared_verification_prompt() -> None:
     assert '"brand_name": "{{brand_name}}"' in user_text
     assert '"beverage_class": "{{beverage_class}}"' in user_text
     assert "government_warning" not in user_text.split("APPLICATION_VALUES_JSON:")[1]
+
+
+def test_openrouter_malformed_schema_does_not_retry_same_model(monkeypatch) -> None:
+    calls = []
+
+    class AsyncClientStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def post(self, url, headers, json):
+            calls.append(json)
+            return make_provider_response(
+                json_body={"choices": [{"message": {"content": "not-json"}}]}
+            )
+
+    monkeypatch.setattr("app.providers.openrouter_provider.httpx.AsyncClient", AsyncClientStub)
+    provider = OpenRouterVerificationProvider(
+        Settings(
+            openrouter_api_key="test-key",
+            openrouter_model_primary="test-model",
+            openrouter_model_fallbacks="",
+        )
+    )
+    prompt = VerificationPromptService().build_specialist_prompts()[0]
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    try:
+        asyncio.run(provider.run_prompt(upload=upload, prompt=prompt, prompt_name=prompt.name))
+    except ProviderError:
+        pass
+    else:
+        raise AssertionError("Expected malformed OpenRouter response to raise ProviderError.")
+
+    assert len(calls) == 1
+
+
+def test_local_malformed_schema_retries_once_with_same_prompt(monkeypatch) -> None:
+    calls = []
+    prompt = VerificationPromptService().build_specialist_prompts()[0]
+    responses = [
+        make_provider_response(json_body={"message": {"content": "not-json"}}),
+        make_provider_response(
+            json_body={
+                "message": {
+                    "content": json.dumps(make_prompt_response_content(prompt.requested_fields))
+                }
+            },
+        ),
+    ]
+
+    class AsyncClientStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def post(self, url, headers, json):
+            calls.append(json)
+            return responses.pop(0)
+
+    monkeypatch.setattr("app.providers.local_provider.httpx.AsyncClient", AsyncClientStub)
+    provider = LocalModelVerificationProvider(
+        Settings(provider_mode="local", local_model_name="qwen2.5vl-alv:latest")
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    result = asyncio.run(
+        provider.run_prompt(upload=upload, prompt=prompt, prompt_name=prompt.name)
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert len(calls) == 2
+    assert calls[0]["messages"] == calls[1]["messages"]
+    assert calls[0]["format"] == calls[1]["format"]
+
+
+def test_local_schema_retry_can_be_disabled(monkeypatch) -> None:
+    calls = []
+    prompt = VerificationPromptService().build_specialist_prompts()[0]
+
+    class AsyncClientStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def post(self, url, headers, json):
+            calls.append(json)
+            return make_provider_response(json_body={"message": {"content": "not-json"}})
+
+    monkeypatch.setattr("app.providers.local_provider.httpx.AsyncClient", AsyncClientStub)
+    monkeypatch.setattr("app.providers.local_provider.LOCAL_SCHEMA_RETRY_COUNT", 0)
+    provider = LocalModelVerificationProvider(
+        Settings(
+            provider_mode="local",
+            local_model_name="qwen2.5vl-alv:latest",
+        )
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    try:
+        asyncio.run(provider.run_prompt(upload=upload, prompt=prompt, prompt_name=prompt.name))
+    except ProviderError:
+        pass
+    else:
+        raise AssertionError("Expected malformed local response to raise ProviderError.")
+
+    assert len(calls) == 1
+
+
+def test_local_malformed_schema_logs_capped_diagnostics(monkeypatch, caplog) -> None:
+    prompt = VerificationPromptService().build_specialist_prompts()[0]
+    malformed_content = "not-json-" + ("x" * 50)
+
+    class AsyncClientStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def post(self, url, headers, json):
+            return make_provider_response(
+                json_body={"message": {"content": malformed_content}},
+            )
+
+    monkeypatch.setattr("app.providers.local_provider.httpx.AsyncClient", AsyncClientStub)
+    monkeypatch.setattr("app.providers.local_provider.LOCAL_SCHEMA_RETRY_COUNT", 0)
+    monkeypatch.setattr("app.providers.local_provider.LOCAL_MODEL_DIAGNOSTIC_PREVIEW_CHARS", 12)
+    caplog.set_level("WARNING", logger="alv.local_provider")
+    provider = LocalModelVerificationProvider(
+        Settings(
+            provider_mode="local",
+            local_model_name="qwen2.5vl-alv:latest",
+        )
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    try:
+        asyncio.run(provider.run_prompt(upload=upload, prompt=prompt, prompt_name=prompt.name))
+    except ProviderError:
+        pass
+    else:
+        raise AssertionError("Expected malformed local response to raise ProviderError.")
+
+    log_message = caplog.records[-1].getMessage()
+    assert "specialist=warning_legibility" in log_message
+    assert "artifact_legibility" in log_message
+    assert "qwen2.5vl-alv:latest" in log_message
+    assert "JSONDecodeError" in log_message
+    assert "response_shape=" in log_message
+    assert "response_preview=not-json-xxx" in log_message
+    assert "not-json-xxxx" not in log_message
 
 
 def test_verification_prompt_accepts_application_values() -> None:
@@ -577,13 +819,15 @@ def test_prompt_forbids_net_contents_inference() -> None:
 def test_prompt_requires_word_for_word_government_warning() -> None:
     prompt = VerificationPromptService().build_prompt()
 
-    assert "exact federal warning statement word-for-word" in prompt.system_instruction
+    assert "required federal warning words in order" in prompt.system_instruction
     assert "missing any required word" in prompt.system_instruction
     assert "changed/reordered/paraphrased wording" in prompt.system_instruction
-    assert "visibly bold" in prompt.system_instruction
-    assert "may be sentence case or all caps" in prompt.system_instruction
-    assert "when the words and punctuation are otherwise exact" in prompt.system_instruction
-    assert "lowercase/title-case/mixed-case prefix" in prompt.system_instruction
+    assert "heading words" in prompt.system_instruction
+    assert "GOVERNMENT WARNING are all caps" in prompt.system_instruction
+    assert "colon after WARNING" in prompt.system_instruction
+    assert "do not fail solely because the colon is missing" in prompt.system_instruction
+    assert "sentence case or all" in prompt.system_instruction
+    assert "mixed-case heading" in prompt.system_instruction
     assert "return the full visible warning statement when readable" in prompt.system_instruction
     assert "only the heading" in prompt.system_instruction
     assert "non-exact heading" in prompt.system_instruction
@@ -863,6 +1107,31 @@ def test_openrouter_parser_accepts_string_evidence_items() -> None:
     assert result.fields.brand_name.evidence[0].summary == "Brand appears on label."
 
 
+def test_parser_accepts_ollama_native_message_content() -> None:
+    requested_fields = ("brand_name",)
+    response = httpx.Response(
+        status_code=200,
+        json={
+            "message": {
+                "content": json.dumps(make_prompt_response_content(requested_fields))
+            }
+        },
+    )
+
+    result = parse_chat_completion_prompt_response(
+        response=response,
+        model="qwen2.5vl-alv:latest",
+        provider_name="local",
+        provider_mode="local",
+        started=time.perf_counter(),
+        attempted_models=["qwen2.5vl-alv:latest"],
+        requested_fields=requested_fields,
+    )
+
+    assert result.fields["brand_name"].status == "pass"
+    assert result.model.provider == "local"
+
+
 def test_parser_fills_backend_deterministic_fields() -> None:
     raw_fields = make_fields().model_dump()
     raw_fields.pop("alcohol_content")
@@ -1140,7 +1409,7 @@ def test_result_guard_fails_mixed_case_government_warning_prefix() -> None:
     assert result.status == VerificationStatus.fail
     assert result.summary == "Required checks failed: government warning."
     assert result.fields.government_warning.status == "fail"
-    assert "prefix 'GOVERNMENT WARNING:' is visible in all caps" in (
+    assert "heading words 'GOVERNMENT WARNING' are visible in all caps" in (
         result.fields.government_warning.reason
     )
 
@@ -1180,7 +1449,7 @@ def test_result_guard_fails_partial_government_warning_text() -> None:
 
 def test_result_guard_allows_warning_spacing_ocr_variants() -> None:
     compact_warning = (
-        "GOVERNMENT WARNING:(1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD "
+        "GOVERNMENT WARNING (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD "
         "NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK "
         "OF BIRTH DEFECTS.(2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR "
         "ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."

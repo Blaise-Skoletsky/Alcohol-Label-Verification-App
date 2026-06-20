@@ -96,7 +96,10 @@ def parse_chat_completion_prompt_response(
 
 def _parse_response_content(response: httpx.Response) -> dict:
     body = response.json()
-    content = body["choices"][0]["message"]["content"]
+    if "choices" in body:
+        content = body["choices"][0]["message"]["content"]
+    else:
+        content = body["message"]["content"]
     parsed = json.loads(content) if isinstance(content, str) else content
     if not isinstance(parsed, dict):
         raise TypeError("Chat completion content did not contain a JSON object.")
