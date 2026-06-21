@@ -97,6 +97,7 @@ export function App() {
     addBlankRow,
     removeRows,
     replaceAndVerify,
+    appendAndVerify,
     verifyRows,
   } = useLabelRows(notify);
 
@@ -282,7 +283,7 @@ export function App() {
 
   function loadSamples(entries: SampleEntry[]) {
     const sampleRows = entries.map(entryToRow);
-    replaceAndVerify(sampleRows, sampleRows.map((row) => row.localId));
+    appendAndVerify(sampleRows, sampleRows.map((row) => row.localId));
     setSelected(new Set());
     setDetailId(null);
     setFilter("all");

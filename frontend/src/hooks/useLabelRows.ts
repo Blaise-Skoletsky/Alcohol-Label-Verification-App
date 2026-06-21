@@ -144,7 +144,7 @@ type Notify = (message: string) => void;
 
 export function useLabelRows(notify: Notify) {
   const [rows, setRows] = useState<LabelRow[]>([]);
-  const [activeBatchId, setActiveBatchId] = useState<string | null>(null);
+  const [activeBatchIds, setActiveBatchIds] = useState<string[]>([]);
   const rowsRef = useRef<LabelRow[]>([]);
 
   useEffect(() => {
@@ -235,7 +235,7 @@ export function useLabelRows(notify: Notify) {
       }
       return next;
     });
-    setActiveBatchId(null);
+    setActiveBatchIds([]);
   }
 
   // Replace the workspace with `next`, then immediately verify the given rows.
@@ -251,7 +251,17 @@ export function useLabelRows(notify: Notify) {
     });
     // verifyRows reads from rowsRef synchronously, so seed it before calling.
     rowsRef.current = next;
-    setActiveBatchId(null);
+    setActiveBatchIds([]);
+    if (verifyIds.length > 0) verifyRows(verifyIds);
+  }
+
+  // Add rows to the current workspace, then immediately verify the given rows.
+  // Used by the sample picker so repeated sample loads are additive.
+  function appendAndVerify(next: LabelRow[], verifyIds: string[]) {
+    const mergedRows = [...rowsRef.current, ...next];
+    setRows(mergedRows);
+    // verifyRows reads from rowsRef synchronously, so seed it before calling.
+    rowsRef.current = mergedRows;
     if (verifyIds.length > 0) verifyRows(verifyIds);
   }
 
@@ -353,7 +363,9 @@ export function useLabelRows(notify: Notify) {
           return { ...row, batchId, serverId: serverId ?? row.serverId };
         }),
       );
-      setActiveBatchId(batchId);
+      setActiveBatchIds((current) =>
+        current.includes(batchId) ? current : [...current, batchId],
+      );
       notify(
         `Verifying ${files.length} label${files.length === 1 ? "" : "s"} — results stream in as each completes.`,
       );
@@ -418,22 +430,24 @@ export function useLabelRows(notify: Notify) {
       );
 
       if (lifecycle === "completed") {
-        setActiveBatchId((current) => (current === batchId ? null : current));
+        setActiveBatchIds((current) => current.filter((id) => id !== batchId));
       }
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
-        setActiveBatchId((current) => (current === batchId ? null : current));
+        setActiveBatchIds((current) => current.filter((id) => id !== batchId));
       }
     }
   }
 
   useEffect(() => {
-    if (!activeBatchId) return;
-    const id = window.setInterval(() => void pollBatch(activeBatchId), 2000);
-    void pollBatch(activeBatchId);
+    if (activeBatchIds.length === 0) return;
+    const id = window.setInterval(() => {
+      for (const batchId of activeBatchIds) void pollBatch(batchId);
+    }, 2000);
+    for (const batchId of activeBatchIds) void pollBatch(batchId);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBatchId]);
+  }, [activeBatchIds]);
 
   return {
     rows,
@@ -445,6 +459,7 @@ export function useLabelRows(notify: Notify) {
     removeRows,
     replaceRows,
     replaceAndVerify,
+    appendAndVerify,
     verifyRows,
   };
 }

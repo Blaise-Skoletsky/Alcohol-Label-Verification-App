@@ -25,6 +25,14 @@ class VerificationService:
         item_id: str,
         application_values: ApplicationValues | None = None,
     ) -> VerificationResult:
+        logger.info(
+            "Review started for '%s' (%s): content_type=%s extension=%s size_bytes=%s",
+            upload.filename,
+            item_id,
+            upload.content_type,
+            upload.extension,
+            len(upload.content),
+        )
         try:
             provider_result = self._result_guard.enforce(
                 await self._provider.verify(

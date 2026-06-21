@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 
 import httpx
@@ -31,6 +32,7 @@ from app.services.result_guard_service import (
     GOVERNMENT_WARNING_FULL_TEXT,
     ResultGuardService,
 )
+from app.services.verification_service import VerificationService
 from app.services.verification_prompt_service import VerificationPromptService
 
 
@@ -391,6 +393,98 @@ def test_batch_submission_and_progress_shape() -> None:
         {"queued", "processing", "pass", "fail", "processing_error"}
     )
     assert all("status" in item for item in last_body["items"])
+
+
+def test_batch_rejects_invalid_file_without_creating_batch() -> None:
+    app.dependency_overrides.clear()
+    test_batch_service = BatchService(
+        settings=Settings(provider_mode="local"),
+        verification_service=TestVerificationService(),
+    )
+
+    app.dependency_overrides[get_batch_service] = lambda: test_batch_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/batches",
+        files=[("files", ("not-supported.txt", b"hello", "text/plain"))],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Only PNG, JPG, or JPEG files can be uploaded."
+    assert test_batch_service._batches == {}
+    app.dependency_overrides.clear()
+
+
+def test_batch_logs_lifecycle_without_payload_contents(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="alv.api")
+    caplog.set_level(logging.INFO, logger="alv.batch")
+    caplog.set_level(logging.INFO, logger="alv.verification")
+
+    class TestProvider:
+        async def verify(
+            self,
+            upload: ValidatedUpload,
+            item_id: str,
+            application_values: ApplicationValues | None = None,
+        ) -> ProviderResult:
+            return ProviderResult(
+                status=VerificationStatus.pass_status,
+                summary="The test provider returned a pass result.",
+                fields=make_fields(),
+                model=ModelMetadata(
+                    provider="test",
+                    model="test-provider",
+                    provider_mode="local",
+                    attempted_models=["test-provider"],
+                ),
+            )
+
+    app.dependency_overrides.clear()
+    test_batch_service = BatchService(
+        settings=Settings(provider_mode="local"),
+        verification_service=VerificationService(TestProvider()),
+    )
+    app.dependency_overrides[get_batch_service] = lambda: test_batch_service
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/batches",
+        files=[
+            ("files", ("sample-one.png", PNG_BYTES, "image/png")),
+            ("files", ("sample-two.png", PNG_BYTES, "image/png")),
+        ],
+        data={"rows": json.dumps([{"brand_name": "One"}, {"brand_name": "Two"}])},
+    )
+
+    assert response.status_code == 200
+    batch_id = response.json()["batch_id"]
+    for _ in range(20):
+        poll = client.get(f"/api/batches/{batch_id}")
+        assert poll.status_code == 200
+        if poll.json()["status"] == "completed":
+            break
+        time.sleep(0.05)
+
+    messages = "\n".join(
+        record.getMessage() for record in caplog.records if record.name.startswith("alv.")
+    )
+    assert "Batch upload request received" in messages
+    assert "Batch upload validation started: file_count=2 rows_present=True" in messages
+    assert f"Batch upload validation accepted: batch_id={batch_id}" in messages
+    assert f"Batch queued: batch_id={batch_id}" in messages
+    assert f"Batch processing started: batch_id={batch_id}" in messages
+    assert f"Batch item processing started: batch_id={batch_id}" in messages
+    assert "Review started for" in messages
+    assert f"Batch item processing completed: batch_id={batch_id}" in messages
+    assert f"Batch completed: batch_id={batch_id}" in messages
+    assert "iVBOR" not in messages
+    assert "test-png" not in messages
+    assert "APPLICATION_VALUES_JSON" not in messages
+    assert "Authorization" not in messages
+    assert "Bearer" not in messages
+    assert "OPENROUTER_API_KEY" not in messages
+    app.dependency_overrides.clear()
 
 
 def test_openrouter_payload_sends_real_image_content() -> None:
