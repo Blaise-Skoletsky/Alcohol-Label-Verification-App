@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+    @property
+    def effective_batch_concurrency(self) -> int:
+        if self.provider_mode == "local":
+            return 1
+        return max(1, self.batch_concurrency)
+
     def model_post_init(self, __context: object) -> None:
         if self.max_upload_mb is not None:
             self.max_upload_size_bytes = int(self.max_upload_mb * 1024 * 1024)

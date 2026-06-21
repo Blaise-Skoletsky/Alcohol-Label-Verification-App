@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 
 from app.models.application import ApplicationValues
@@ -14,15 +15,19 @@ from app.providers.chat_completion_parser import VERIFICATION_FIELD_NAMES, parse
 from app.providers.base import VerificationPromptRunner
 from app.services.verification_prompt_service import VerificationPromptService
 
+logger = logging.getLogger("alv.multi_pass")
+
 
 class MultiPassVerificationProvider:
     def __init__(
         self,
         runner: VerificationPromptRunner,
         prompt_service: VerificationPromptService | None = None,
+        prompt_concurrency: int | None = None,
     ):
         self._runner = runner
         self._prompt_service = prompt_service or VerificationPromptService()
+        self._prompt_concurrency = prompt_concurrency
 
     async def verify(
         self,
@@ -37,16 +42,24 @@ class MultiPassVerificationProvider:
         if not prompts:
             raise ProviderError("No verification checks were configured.", retryable=False)
 
-        results = await asyncio.gather(
-            *(
-                self._runner.run_prompt(
+        concurrency = self._effective_prompt_concurrency(len(prompts))
+        logger.info(
+            "Multi-pass verification started: item_id=%s prompt_count=%s prompt_concurrency=%s",
+            item_id,
+            len(prompts),
+            concurrency,
+        )
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def run_prompt(prompt) -> ProviderPromptResult:
+            async with semaphore:
+                return await self._runner.run_prompt(
                     upload=upload,
                     prompt=prompt,
                     prompt_name=prompt.name,
                 )
-                for prompt in prompts
-            )
-        )
+
+        results = await asyncio.gather(*(run_prompt(prompt) for prompt in prompts))
         fields = self._merge_fields(prompts[0].deterministic_fields, results)
         return ProviderResult(
             status=self._overall_status(fields),
@@ -124,3 +137,8 @@ class MultiPassVerificationProvider:
             fallback_attempts=sum(result.model.fallback_attempts for result in results),
             attempted_models=attempted_models,
         )
+
+    def _effective_prompt_concurrency(self, prompt_count: int) -> int:
+        if self._prompt_concurrency is None:
+            return prompt_count
+        return min(prompt_count, max(1, self._prompt_concurrency))

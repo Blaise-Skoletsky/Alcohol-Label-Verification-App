@@ -140,4 +140,4 @@ The design docs are split by purpose:
 
 Use [docs/startup.md](docs/startup.md) for the full local startup guide. If you
 run the setup with Ollama, verification will be slower than in the deployed
-environment.
+environment. Verification requests are sent as batches of 1 when running locally.

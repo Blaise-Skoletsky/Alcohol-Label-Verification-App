@@ -167,7 +167,8 @@ is strongly preferred for practical batch uploads.
 
 Use this path after choosing either the OpenRouter `.env` or the local Ollama
 `.env` above. Docker starts the FastAPI backend and serves the built React
-frontend from the same app container.
+frontend from the same app container. The Compose file loads `.env` directly and
+uses the browser-facing URL from `.env.example`: `http://localhost:7001`.
 
 For the local Ollama provider path, Ollama runs separately on your host machine.
 The Docker app container reaches it through `host.docker.internal`.
@@ -181,7 +182,7 @@ docker compose up --build
 Open:
 
 ```text
-http://localhost:8000
+http://localhost:7001
 ```
 
 Stop the app:

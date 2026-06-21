@@ -57,7 +57,7 @@ class BatchService:
             "Batch queued: batch_id=%s total_items=%s concurrency=%s",
             batch_id,
             batch.total_items,
-            self._settings.batch_concurrency,
+            self._settings.effective_batch_concurrency,
         )
         asyncio.create_task(
             self._process_batch(
@@ -86,7 +86,7 @@ class BatchService:
         application_values: list[ApplicationValues],
         queued_at: float,
     ) -> None:
-        semaphore = asyncio.Semaphore(self._settings.batch_concurrency)
+        semaphore = asyncio.Semaphore(self._settings.effective_batch_concurrency)
         await self._set_batch_status(batch_id, BatchLifecycleStatus.processing)
         processing_started = time.perf_counter()
         logger.info(

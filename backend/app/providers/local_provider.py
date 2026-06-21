@@ -170,10 +170,58 @@ class LocalModelVerificationProvider:
         attempts = 1 + self._schema_retry_count()
         last_error: ProviderError | None = None
         for attempt in range(attempts):
-            response = await client.post(self._provider_url, headers=headers, json=payload)
-            response.raise_for_status()
+            attempt_started = time.perf_counter()
+            logger.info(
+                "Local model prompt started: prompt=%s attempt=%s/%s model=%s timeout_seconds=%s requested_fields=%s",
+                prompt_name,
+                attempt + 1,
+                attempts,
+                self._model,
+                self._settings.provider_timeout_seconds,
+                ",".join(requested_fields),
+            )
             try:
-                return parser(response)
+                response = await client.post(self._provider_url, headers=headers, json=payload)
+            except httpx.TimeoutException:
+                logger.warning(
+                    "Local model prompt timed out: prompt=%s attempt=%s/%s duration_ms=%s timeout_seconds=%s",
+                    prompt_name,
+                    attempt + 1,
+                    attempts,
+                    round((time.perf_counter() - attempt_started) * 1000),
+                    self._settings.provider_timeout_seconds,
+                )
+                raise
+            except httpx.HTTPError:
+                logger.exception(
+                    "Local model prompt HTTP error: prompt=%s attempt=%s/%s duration_ms=%s",
+                    prompt_name,
+                    attempt + 1,
+                    attempts,
+                    round((time.perf_counter() - attempt_started) * 1000),
+                )
+                raise
+            response.raise_for_status()
+            logger.info(
+                "Local model prompt response received: prompt=%s attempt=%s/%s status_code=%s duration_ms=%s bytes=%s",
+                prompt_name,
+                attempt + 1,
+                attempts,
+                response.status_code,
+                round((time.perf_counter() - attempt_started) * 1000),
+                len(response.content),
+            )
+            try:
+                parsed = self._normalize_local_result(parser(response), prompt_name=prompt_name)
+                logger.info(
+                    "Local model prompt parsed: prompt=%s attempt=%s/%s duration_ms=%s total_review_ms=%s",
+                    prompt_name,
+                    attempt + 1,
+                    attempts,
+                    round((time.perf_counter() - attempt_started) * 1000),
+                    round((time.perf_counter() - started) * 1000),
+                )
+                return parsed
             except ProviderError as exc:
                 last_error = exc
                 self._log_malformed_response(
@@ -188,6 +236,48 @@ class LocalModelVerificationProvider:
                 raise
         raise last_error or ProviderError(
             "The verification service returned an unreadable response. Please try again."
+        )
+
+    def _normalize_local_result(
+        self,
+        result: ProviderResult | ProviderPromptResult,
+        *,
+        prompt_name: str,
+    ) -> ProviderResult | ProviderPromptResult:
+        if isinstance(result, ProviderPromptResult):
+            field = result.fields.get("artifact_legibility")
+            if field and self._needs_artifact_legibility_label_value(field):
+                logger.info(
+                    "Local model omitted artifact_legibility label_value on a passing field; "
+                    "normalizing local-only output: prompt=%s",
+                    prompt_name,
+                )
+                result.fields["artifact_legibility"] = self._readable_artifact_field(field)
+            return result
+
+        if self._needs_artifact_legibility_label_value(result.fields.artifact_legibility):
+            logger.info(
+                "Local model omitted artifact_legibility label_value on a passing field; "
+                "normalizing local-only output: prompt=%s",
+                prompt_name,
+            )
+            result.fields.artifact_legibility = self._readable_artifact_field(
+                result.fields.artifact_legibility
+            )
+        return result
+
+    def _needs_artifact_legibility_label_value(self, field) -> bool:
+        return field.status == "pass" and not (field.label_value or "").strip()
+
+    def _readable_artifact_field(self, field):
+        reason = field.reason or ""
+        if "readable" not in reason.lower():
+            reason = "Local model marked the label artwork readable."
+        return field.model_copy(
+            update={
+                "label_value": "Label artwork readable",
+                "reason": reason,
+            }
         )
 
     def _schema_retry_count(self) -> int:

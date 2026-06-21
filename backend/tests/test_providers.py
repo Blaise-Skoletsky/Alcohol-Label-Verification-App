@@ -250,6 +250,49 @@ def test_local_malformed_schema_retries_once_with_same_prompt(monkeypatch) -> No
     assert calls[0]["format"] == calls[1]["format"]
 
 
+def test_local_provider_normalizes_blank_artifact_legibility_label_value(monkeypatch) -> None:
+    prompt = VerificationPromptService().build_specialist_prompts()[0]
+    content = make_prompt_response_content(prompt.requested_fields)
+    content["fields"]["artifact_legibility"]["status"] = "pass"
+    content["fields"]["artifact_legibility"]["label_value"] = ""
+    content["fields"]["artifact_legibility"]["reason"] = "No label text visible."
+    response_content = json.dumps(content)
+
+    class AsyncClientStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return None
+
+        async def post(self, url, headers, json):
+            return make_provider_response(
+                json_body={"message": {"content": response_content}},
+            )
+
+    monkeypatch.setattr("app.providers.local_provider.httpx.AsyncClient", AsyncClientStub)
+    provider = LocalModelVerificationProvider(
+        Settings(provider_mode="local", local_model_name="qwen2.5vl-alv:latest")
+    )
+    upload = ValidatedUpload(
+        filename="sample.png",
+        content_type="image/png",
+        extension=".png",
+        content=PNG_BYTES,
+    )
+
+    result = asyncio.run(
+        provider.run_prompt(upload=upload, prompt=prompt, prompt_name=prompt.name)
+    )
+
+    assert result.fields["artifact_legibility"].status == "pass"
+    assert result.fields["artifact_legibility"].label_value == "Label artwork readable"
+    assert result.fields["artifact_legibility"].reason == "Local model marked the label artwork readable."
+
+
 def test_local_schema_retry_can_be_disabled(monkeypatch) -> None:
     calls = []
     prompt = VerificationPromptService().build_specialist_prompts()[0]

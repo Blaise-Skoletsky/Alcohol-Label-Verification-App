@@ -12,6 +12,12 @@ def build_provider(
 ) -> VerificationProvider:
     if settings.provider_mode == "openrouter":
         runner = OpenRouterVerificationProvider(settings, prompt_service=prompt_service)
+        prompt_concurrency = None
     else:
         runner = LocalModelVerificationProvider(settings, prompt_service=prompt_service)
-    return MultiPassVerificationProvider(runner=runner, prompt_service=prompt_service)
+        prompt_concurrency = 1
+    return MultiPassVerificationProvider(
+        runner=runner,
+        prompt_service=prompt_service,
+        prompt_concurrency=prompt_concurrency,
+    )

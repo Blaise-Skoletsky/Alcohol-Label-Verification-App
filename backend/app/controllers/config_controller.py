@@ -20,6 +20,6 @@ def api_config(settings: Settings = Depends(get_settings)) -> ConfigResponse:
         else None,
         max_upload_mb=round(settings.max_upload_size_bytes / (1024 * 1024), 1),
         max_batch_labels=settings.max_batch_count,
-        batch_concurrency=settings.batch_concurrency,
+        batch_concurrency=settings.effective_batch_concurrency,
         allowed_file_types=ALLOWED_FILE_TYPES,
     )
