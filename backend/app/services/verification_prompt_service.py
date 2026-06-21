@@ -233,7 +233,8 @@ government_warning use application_value='Required federal government warning'."
             "preserving heading case and punctuation when visible. Never rewrite a lowercase, "
             "title-case, or mixed-case heading into all caps. If the heading is "
             "'government warning', return exactly 'government warning', not "
-            "'GOVERNMENT WARNING'."
+            "'GOVERNMENT WARNING'. If the visible heading is 'government warning:', "
+            "warning_heading_text must be 'government warning:' and the field must fail."
         )
 
     # ------------------------------------------------------------------
@@ -269,6 +270,16 @@ fails, any field whose evidence cannot be read must also fail."""
         return """\
 FIELD 2 - brand_name:
 Compare APPLICATION_VALUES_JSON.brand_name to the brand name printed on the label.
+First search all visible label panels for the submitted brand's distinctive
+words, including producer, bottler, importer, and responsibility statements.
+Do not treat unrelated story text, campaign names, URLs, place names, collection
+programs, or descriptive copy as the brand when the submitted brand or its core
+distinctive words are visible elsewhere. Generic business descriptors such as
+winery, distillery, brewery, company, LLC, or Inc. may appear in a responsibility
+statement rather than the front brand line; that can still satisfy the submitted
+brand when the distinctive brand words match. Reserve, estate, collector's
+reserve, vintage, varietal, appellation, and similar style modifiers do not make
+the brand different when the core brand matches.
 PASS: Same brand, allowing capitalization, punctuation, apostrophe, spacing, and
 trademark-symbol differences.
 FAIL: Different brand wording, brand absent, obscured brand text, or multiple

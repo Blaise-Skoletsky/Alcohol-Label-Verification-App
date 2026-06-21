@@ -824,6 +824,15 @@
 .figure-head {
   padding: 26px 28px 6px;
 }
+.panel-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
 .figure-title-row {
   display: flex;
   align-items: center;
@@ -883,8 +892,14 @@
   padding: 18px 24px;
   border-bottom: 1px solid #efefea;
 }
-.slideover-file {
+.slideover-side-title-block {
   flex: 1;
+  min-width: 0;
+}
+.slideover-side-title-block .panel-eyebrow {
+  margin-bottom: 7px;
+}
+.slideover-file {
   min-width: 0;
   font-family: "Geist Mono", monospace;
   font-size: 13px;

@@ -23,15 +23,19 @@ GOVERNMENT_WARNING_FULL_TEXT = f"{GOVERNMENT_WARNING_PREFIX} {GOVERNMENT_WARNING
 
 class ResultGuardService:
     def enforce(self, result: ProviderResult) -> ProviderResult:
+        name_address = self._guard_required_values(result.fields.name_address)
         guarded_fields = VerificationFields(
             artifact_legibility=self._guard_artifact_legibility(result.fields.artifact_legibility),
-            brand_name=self._guard_required_values(result.fields.brand_name),
+            brand_name=self._guard_brand_name(
+                result.fields.brand_name,
+                supporting_fields=(name_address,),
+            ),
             class_type_designation=self._guard_class_type_designation(
                 result.fields.class_type_designation
             ),
             alcohol_content=self._guard_alcohol_content(result.fields.alcohol_content),
             net_contents=self._guard_required_values(result.fields.net_contents),
-            name_address=self._guard_required_values(result.fields.name_address),
+            name_address=name_address,
             country_of_origin=self._guard_country_of_origin(result.fields.country_of_origin),
             color_additive_disclosure=self._guard_required_values(
                 result.fields.color_additive_disclosure
@@ -60,6 +64,35 @@ class ResultGuardService:
                     "reason": "A passing field must include readable application and label values.",
                 }
         )
+        return field
+
+    def _guard_brand_name(
+        self,
+        field: VerificationFieldResult,
+        *,
+        supporting_fields: tuple[VerificationFieldResult, ...],
+    ) -> VerificationFieldResult:
+        field = self._guard_required_values(field)
+        if field.status == "pass":
+            return field
+
+        brand_tokens = self._distinctive_brand_tokens(field.application_value)
+        if not brand_tokens:
+            return field
+
+        supporting_text = self._field_text_for_matching(supporting_fields)
+        if brand_tokens.issubset(self._normalized_word_set(supporting_text)):
+            return field.model_copy(
+                update={
+                    "status": "pass",
+                    "label_value": field.application_value,
+                    "reason": (
+                        "Backend guard: submitted brand appears in visible label "
+                        "evidence from another required field."
+                    ),
+                }
+            )
+
         return field
 
     def _guard_class_type_designation(
@@ -292,6 +325,62 @@ class ResultGuardService:
             and (field.application_value or "").strip().lower() == "not required"
             and (field.label_value or "").strip().lower() == "not required"
         )
+
+    def _distinctive_brand_tokens(self, value: str | None) -> set[str]:
+        generic_words = {
+            "and",
+            "the",
+            "of",
+            "a",
+            "an",
+            "winery",
+            "distillery",
+            "brewery",
+            "company",
+            "co",
+            "llc",
+            "inc",
+            "ltd",
+            "limited",
+            "corp",
+            "corporation",
+            "reserve",
+            "reserves",
+            "estate",
+            "estates",
+            "vintage",
+            "vineyard",
+            "vineyards",
+        }
+        return {
+            token
+            for token in self._normalized_word_set(value or "")
+            if token not in generic_words
+        }
+
+    def _field_text_for_matching(self, fields: tuple[VerificationFieldResult, ...]) -> str:
+        parts: list[str] = []
+        for field in fields:
+            parts.extend(
+                [
+                    field.label_value or "",
+                    field.reason or "",
+                    " ".join(evidence.summary for evidence in field.evidence),
+                    " ".join(
+                        evidence.source_excerpt or ""
+                        for evidence in field.evidence
+                    ),
+                ]
+            )
+        return " ".join(parts)
+
+    def _normalized_word_set(self, value: str) -> set[str]:
+        normalized = (
+            unicodedata.normalize("NFKD", value.lower())
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+        return set(re.findall(r"[a-z0-9]+", normalized))
 
     def _extract_abv(self, value: str | None) -> float | None:
         if not value:

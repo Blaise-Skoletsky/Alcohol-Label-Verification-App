@@ -30,6 +30,7 @@ from helpers import (
     make_provider_response,
     make_raw_warning_field,
     make_test_client,
+    sample_label_path,
     wait_for_batch,
 )
 
@@ -80,9 +81,7 @@ def test_batch_guard_fails_cleo_lowercase_warning_from_wire_response() -> None:
     )
     app.dependency_overrides[get_batch_service] = lambda: batch_service
     client = TestClient(app)
-    cleo_path = (
-        "frontend/public/sample_labels/fail/cleo_2019-04-17_lowercase_warning.png"
-    )
+    cleo_path = sample_label_path("fail/cleo_2019-04-17_lowercase_warning.png")
 
     with open(cleo_path, "rb") as file:
         response = client.post(
@@ -154,8 +153,8 @@ def test_batch_guard_keeps_one_failing_warning_in_multi_item_batch() -> None:
     )
     app.dependency_overrides[get_batch_service] = lambda: batch_service
     client = TestClient(app)
-    cleo_path = "frontend/public/sample_labels/fail/cleo_2019-04-17_lowercase_warning.png"
-    pass_path = "frontend/public/sample_labels/pass/3_steves_winery_2017-05-25.png"
+    cleo_path = sample_label_path("fail/cleo_2019-04-17_lowercase_warning.png")
+    pass_path = sample_label_path("pass/3_steves_winery_2017-05-25.png")
 
     with open(cleo_path, "rb") as cleo_file, open(pass_path, "rb") as pass_file:
         response = client.post(

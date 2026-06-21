@@ -1,18 +1,5 @@
 # Alcohol Label Verification App
 
-## Introduction
-
-This is my submission for the Treasury take-home test.
-
-The application is a prototype for checking alcohol label artwork against
-structured application data. It is not meant to be a final legal approval system.
-The goal is to show the product approach: what inputs I chose, what I decided not
-to support, and how I balanced speed, accuracy, and usability.
-
-At a technical level, I chose a fairly standard web stack on purpose: React and
-TypeScript for the frontend, FastAPI for the backend, Docker for a repeatable
-runtime, and OpenRouter for hosted model access. 
-
 ## Demo Testing Controls
 
 The app includes two demo-marked buttons that are only there to provide sample labels

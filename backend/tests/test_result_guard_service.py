@@ -78,6 +78,80 @@ def test_result_guard_fails_passing_class_type_when_beverage_class_conflicts() -
     assert "beverage class" in result.fields.class_type_designation.reason
 
 
+def test_result_guard_passes_brand_when_submitted_brand_is_in_name_address() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.fail,
+            summary="Model failed the brand.",
+            fields=make_fields(
+                field_updates={
+                    "brand_name": make_field(
+                        status="fail",
+                        application_value="3 Steves Winery",
+                        label_value="Stanford",
+                        reason="Model incorrectly treated story copy as the brand.",
+                    ),
+                    "name_address": make_field(
+                        application_value=(
+                            "Grown, Produced and Bottled by 3 Steves Winery, "
+                            "Livermore Valley, California"
+                        ),
+                        label_value=(
+                            "Grown, Produced and Bottled by 3 Steves Winery, "
+                            "Livermore Valley, California"
+                        ),
+                        reason="The responsibility statement is visible on the label.",
+                    ),
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.pass_status
+    assert result.fields.brand_name.status == "pass"
+    assert result.fields.brand_name.label_value == "3 Steves Winery"
+    assert "Backend guard" in result.fields.brand_name.reason
+
+
+def test_result_guard_keeps_brand_fail_when_name_address_has_different_brand() -> None:
+    result = ResultGuardService().enforce(
+        ProviderResult(
+            status=VerificationStatus.fail,
+            summary="Model failed the brand.",
+            fields=make_fields(
+                field_updates={
+                    "brand_name": make_field(
+                        status="fail",
+                        application_value="Duck Creek Cellars",
+                        label_value="Duck Walk Vineyards",
+                        reason="The visible brand does not match the application.",
+                    ),
+                    "name_address": make_field(
+                        application_value="Produced and bottled by Duck Walk Vineyards",
+                        label_value="Produced and bottled by Duck Walk Vineyards",
+                        reason="The responsibility statement is visible on the label.",
+                    ),
+                }
+            ),
+            model=ModelMetadata(
+                provider="test",
+                model="test-double",
+                provider_mode="local",
+            ),
+        )
+    )
+
+    assert result.status == VerificationStatus.fail
+    assert result.summary == "Required checks failed: brand name."
+    assert result.fields.brand_name.status == "fail"
+    assert result.fields.brand_name.label_value == "Duck Walk Vineyards"
+
+
 def test_result_guard_passes_table_wine_alcohol_content_exception() -> None:
     result = ResultGuardService().enforce(
         ProviderResult(

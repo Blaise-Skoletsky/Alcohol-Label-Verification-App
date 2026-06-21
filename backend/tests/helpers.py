@@ -1,5 +1,6 @@
 import json
 import time
+from pathlib import Path
 
 import httpx
 from fastapi.testclient import TestClient
@@ -31,6 +32,11 @@ from app.services.result_guard_service import (
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"test-png"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def sample_label_path(relative_path: str) -> Path:
+    return REPO_ROOT / "frontend" / "public" / "sample_labels" / relative_path
 
 
 def make_field(

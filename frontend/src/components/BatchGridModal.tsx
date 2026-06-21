@@ -35,7 +35,7 @@ type GridRow = {
 };
 
 const COL_TEMPLATE =
-  "minmax(0, 2.25fr) minmax(0, 1fr) 108px minmax(0, 1.15fr) 92px 96px minmax(0, 1.3fr) 118px 96px 96px 118px";
+  "minmax(0, 2.25fr) minmax(0, 1fr) 108px minmax(0, 1.15fr) 92px 96px minmax(0, 1.3fr) 154px 96px 96px 180px";
 const C = { green: "#0b7a4b", yellow: "#c9870f", red: "#c5362b", muted: "#b0b0aa" };
 
 let gridSeq = 0;
@@ -268,10 +268,20 @@ export function BatchGridModal({
 
   return (
     <>
-    <div className="modal-overlay" onClick={onClose} role="presentation">
+    <div
+      className="modal-overlay"
+      style={{ padding: 4 }}
+      onClick={onClose}
+      role="presentation"
+    >
       <div
         className="modal"
-        style={{ width: "min(1640px, 98vw)", height: "min(960px, 95vh)", maxHeight: "95vh" }}
+        style={{
+          width: "min(1848px, calc(100vw - 8px))",
+          maxWidth: "none",
+          height: "min(960px, 95vh)",
+          maxHeight: "95vh",
+        }}
         onClick={(event) => event.stopPropagation()}
       >
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -644,6 +654,8 @@ export function BatchGridModal({
                               fontSize: 12.5,
                               fontWeight: 600,
                               color: st.color,
+                              flex: 1,
+                              minWidth: 0,
                               whiteSpace: "nowrap",
                               overflow: "hidden",
                               textOverflow: "ellipsis",

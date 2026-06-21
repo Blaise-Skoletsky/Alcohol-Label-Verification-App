@@ -124,9 +124,15 @@ export function DetailModal({
   return (
     <>
       <div className="slideover-backdrop" role="presentation" onClick={onClose} />
-      <section className="slideover" role="dialog" aria-modal="true" aria-label="Label details">
+      <section
+        className="slideover"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Label and application entry details"
+      >
         <div className="slideover-figure">
           <div className="figure-head">
+            <div className="panel-eyebrow">Label</div>
             <div className="figure-title-row">
               <div className="figure-title" title={row.brand}>
                 {row.brand || "Untitled label"}
@@ -162,8 +168,11 @@ export function DetailModal({
 
         <div className="slideover-side">
           <header className="slideover-side-head">
-            <div className="slideover-file" title={row.fileName}>
-              {row.fileName || "no image"}
+            <div className="slideover-side-title-block">
+              <div className="panel-eyebrow">Application Entry</div>
+              <div className="slideover-file" title={row.fileName}>
+                {row.fileName || "no image"}
+              </div>
             </div>
             <button
               type="button"

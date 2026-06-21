@@ -16,6 +16,7 @@ from helpers import (
     make_chat_completion_result_content,
     make_raw_warning_field,
     make_test_client,
+    sample_label_path,
 )
 
 
@@ -70,9 +71,7 @@ def test_single_verify_guard_fails_cleo_lowercase_warning_from_wire_response() -
     verification_service = VerificationService(WireFakeProvider(content))
     app.dependency_overrides[get_verification_service] = lambda: verification_service
     client = TestClient(app)
-    cleo_path = (
-        "frontend/public/sample_labels/fail/cleo_2019-04-17_lowercase_warning.png"
-    )
+    cleo_path = sample_label_path("fail/cleo_2019-04-17_lowercase_warning.png")
 
     with open(cleo_path, "rb") as file:
         response = client.post(
