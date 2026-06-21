@@ -8,6 +8,7 @@ const frontendRoot = path.resolve(scriptDir, "..");
 // reads them — it never touches the gitignored data/ folder.
 const sampleRoot = path.join(frontendRoot, "public", "sample_labels");
 const outPath = path.join(frontendRoot, "src", "generated", "sampleLabels.ts");
+const manifestPath = path.join(sampleRoot, "manifest.json");
 
 const metadata = {
   "pass/3_steves_winery_2013-08-11.png": {
@@ -24,10 +25,10 @@ const metadata = {
     },
   },
   "pass/3_steves_winery_2017-05-25.png": {
-    brand: "3 Steves Reserve",
+    brand: "3 Steves Winery",
     desc: "Expected pass: application values match the 2014 Cabernet Sauvignon label.",
     applicationValues: {
-      brand_name: "3 Steves Reserve",
+      brand_name: "3 Steves Winery",
       beverage_class: "wine",
       class_type_designation: "Cabernet Sauvignon",
       alcohol_content: "Alcohol: 14.6% by volume",
@@ -38,10 +39,10 @@ const metadata = {
     },
   },
   "pass/3_steves_winery_2017-05-25_glare.png": {
-    brand: "3 Steves Reserve",
+    brand: "3 Steves Winery",
     desc: "Expected pass: intentionally strong glare, but the required label information remains readable.",
     applicationValues: {
-      brand_name: "3 Steves Reserve",
+      brand_name: "3 Steves Winery",
       beverage_class: "wine",
       class_type_designation: "Cabernet Sauvignon",
       alcohol_content: "Alcohol: 14.6% by volume",
@@ -515,6 +516,7 @@ export const SAMPLES: SampleEntry[] = ${JSON.stringify(samples, null, 2)};
 
 mkdirSync(path.dirname(outPath), { recursive: true });
 writeFileSync(outPath, source, "utf8");
+writeFileSync(manifestPath, `${JSON.stringify(samples, null, 2)}\n`, "utf8");
 console.log(`Generated ${samples.length} sample label entries.`);
 
 function hasRequiredMetadata(entry) {

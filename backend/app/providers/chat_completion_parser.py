@@ -5,6 +5,7 @@ from typing import Mapping
 import httpx
 
 from app.models.verification import (
+    GovernmentWarningExtraction,
     ModelMetadata,
     VerificationEvidence,
     VerificationFieldResult,
@@ -73,7 +74,7 @@ def parse_chat_completion_prompt_response(
         parsed = _parse_response_content(response)
         raw_fields = parsed["fields"]
         fields = {
-            field_name: _parse_field(raw_fields[field_name])
+            field_name: parse_verification_field(raw_fields[field_name], field_name)
             for field_name in requested_fields
         }
         return ProviderPromptResult(
@@ -128,22 +129,47 @@ def _model_metadata(
 def _parse_fields(raw_fields: dict, deterministic_fields: Mapping[str, dict]) -> VerificationFields:
     def build_field(field_name: str) -> VerificationFieldResult:
         field = deterministic_fields.get(field_name) or raw_fields[field_name]
-        return _parse_field(field)
+        return parse_verification_field(field, field_name)
 
     return VerificationFields(
         **{field_name: build_field(field_name) for field_name in VERIFICATION_FIELD_NAMES}
     )
 
 
-def _parse_field(field: dict) -> VerificationFieldResult:
+def parse_verification_field(field: dict, field_name: str | None = None) -> VerificationFieldResult:
     evidence = [_parse_evidence_item(item) for item in field.get("evidence", [])]
-    return VerificationFieldResult(
-        status=field["status"],
-        application_value=field.get("application_value"),
-        label_value=field.get("label_value") or field.get("extracted_value"),
-        reason=field.get("reason") or field.get("explanation", ""),
-        evidence=evidence,
-    )
+    parsed = {
+        "status": field["status"],
+        "application_value": field.get("application_value"),
+        "label_value": field.get("label_value") or field.get("extracted_value"),
+        "reason": field.get("reason") or field.get("explanation", ""),
+        "evidence": evidence,
+    }
+    if field_name == "government_warning":
+        parsed.update(
+            {
+                "warning_extraction": GovernmentWarningExtraction(
+                    block_visible=_parse_optional_bool(field.get("warning_block_visible")),
+                    heading_text=_parse_optional_text(field.get("warning_heading_text")),
+                    body_text=_parse_optional_text(field.get("warning_body_text")),
+                    full_text=_parse_optional_text(field.get("warning_full_text")),
+                    unreadable_or_obscured=_parse_optional_bool(
+                        field.get("warning_unreadable_or_obscured")
+                    ),
+                ),
+            }
+        )
+    return VerificationFieldResult(**parsed)
+
+
+def _parse_optional_bool(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _parse_optional_text(value: object) -> str | None:
+    if isinstance(value, str):
+        return value
+    return None
 
 
 def _parse_evidence_item(item: object) -> VerificationEvidence:

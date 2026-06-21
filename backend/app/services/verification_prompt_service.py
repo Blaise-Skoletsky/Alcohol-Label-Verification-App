@@ -92,16 +92,7 @@ class VerificationPromptService:
                 "Return JSON only. The image is label artwork only; never extract application "
                 "values from it. Use only visible label text for label_value and evidence."
             ),
-            (
-                "Government warning is strict and label-only: pass only when the label shows "
-                "the heading words GOVERNMENT WARNING in all caps and the required federal "
-                "warning words in order, with no missing, changed, reordered, or paraphrased "
-                "words. Treat punctuation, spacing, line breaks, and the colon after WARNING "
-                "as formatting; do not fail solely because the colon is missing. For "
-                "government_warning.label_value, transcribe the full visible warning statement "
-                "as printed, preserving heading case and punctuation when visible. Never "
-                "rewrite a lowercase, title-case, or mixed-case heading into all caps."
-            ),
+            self._government_warning_policy_text(),
             self._task_intro(),
             self._overall_verdict_rules(),
             self._field_artifact_legibility(),
@@ -147,16 +138,7 @@ class VerificationPromptService:
                 "application values from it. Use only visible label text for "
                 "label_value and evidence."
             ),
-            (
-                "Government warning is strict and label-only: pass only when the label shows "
-                "the heading words GOVERNMENT WARNING in all caps and the required federal "
-                "warning words in order, with no missing, changed, reordered, or paraphrased "
-                "words. Treat punctuation, spacing, line breaks, and the colon after WARNING "
-                "as formatting; do not fail solely because the colon is missing. For "
-                "government_warning.label_value, transcribe the full visible warning statement "
-                "as printed, preserving heading case and punctuation when visible. Never "
-                "rewrite a lowercase, title-case, or mixed-case heading into all caps."
-            )
+            self._government_warning_policy_text()
             if "government_warning" in requested_fields
             else "",
             self._task_intro(),
@@ -236,6 +218,23 @@ fields. For each requested field, copy the submitted value into application_valu
 extract visible label text into label_value, then apply the PASS/FAIL rule. For
 artifact_legibility use application_value='N/A - text entry form'. For
 government_warning use application_value='Required federal government warning'."""
+
+    def _government_warning_policy_text(self) -> str:
+        return (
+            "Government warning is strict and label-only: pass only when the label shows "
+            "the heading words GOVERNMENT WARNING in all caps and the required federal "
+            "warning words in order, with no missing, changed, reordered, or paraphrased "
+            "words. Treat punctuation, spacing, line breaks, and the colon after WARNING "
+            "as formatting; do not fail solely because the colon is missing. For "
+            "government_warning, extract the exact visible warning text first. Transcribe "
+            "the heading exactly as visible; do not correct capitalization. Do not decide "
+            "pass/fail from memory of the required warning. For government_warning.label_value "
+            "and warning_full_text, transcribe the full visible warning statement as printed, "
+            "preserving heading case and punctuation when visible. Never rewrite a lowercase, "
+            "title-case, or mixed-case heading into all caps. If the heading is "
+            "'government warning', return exactly 'government warning', not "
+            "'GOVERNMENT WARNING'."
+        )
 
     # ------------------------------------------------------------------
     # Overall verdict rules
@@ -434,7 +433,13 @@ For label_value, return the full visible warning statement when readable, not
 only the heading. Preserve the visible heading case and punctuation exactly as
 printed. If the image shows 'government warning', 'Government Warning', or any
 other non-exact heading case, return the full visible statement with that
-non-exact heading and fail the field."""
+non-exact heading and fail the field.
+Extraction fields for government_warning:
+- warning_block_visible: true only when a government-warning block is visibly present.
+- warning_heading_text: the heading exactly as visible, including case and visible colon.
+- warning_body_text: the visible body text after the heading, exactly as readable.
+- warning_full_text: the full visible warning block text exactly as readable.
+- warning_unreadable_or_obscured: true when any needed warning text is unreadable, hidden, covered, cut off, or ambiguous."""
 
     # ------------------------------------------------------------------
     # Output format
@@ -448,6 +453,9 @@ Return this JSON object only:
 
 Each field object must be:
 {{"status":"pass|fail","application_value":"...","label_value":"...","reason":"short internal note","evidence":[]}}
+
+For government_warning only, include these additional backend extraction fields:
+{{"warning_block_visible":true|false,"warning_heading_text":"...","warning_body_text":"...","warning_full_text":"...","warning_unreadable_or_obscured":true|false}}
 
 Requested fields: {requested}."""
 

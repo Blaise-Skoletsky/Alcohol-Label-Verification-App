@@ -10,7 +10,7 @@ from app.models.verification import (
     VerificationStatus,
 )
 from app.providers.base import ProviderError, ProviderPromptResult, ProviderResult
-from app.providers.chat_completion_parser import VERIFICATION_FIELD_NAMES
+from app.providers.chat_completion_parser import VERIFICATION_FIELD_NAMES, parse_verification_field
 from app.providers.base import VerificationPromptRunner
 from app.services.verification_prompt_service import VerificationPromptService
 
@@ -61,7 +61,7 @@ class MultiPassVerificationProvider:
         results: tuple[ProviderPromptResult, ...],
     ) -> VerificationFields:
         merged: dict[str, VerificationFieldResult] = {
-            field_name: self._build_field(field)
+            field_name: parse_verification_field(field, field_name)
             for field_name, field in deterministic_fields.items()
         }
         for result in results:
@@ -83,15 +83,6 @@ class MultiPassVerificationProvider:
             )
         return VerificationFields(
             **{field_name: merged[field_name] for field_name in VERIFICATION_FIELD_NAMES}
-        )
-
-    def _build_field(self, field: dict) -> VerificationFieldResult:
-        return VerificationFieldResult(
-            status=field["status"],
-            application_value=field.get("application_value"),
-            label_value=field.get("label_value") or field.get("extracted_value"),
-            reason=field.get("reason") or field.get("explanation", ""),
-            evidence=field.get("evidence", []),
         )
 
     def _overall_status(self, fields: VerificationFields) -> VerificationStatus:

@@ -11,7 +11,7 @@ from app.providers.base import ProviderResult
 
 GOVERNMENT_WARNING_HEADING = "GOVERNMENT WARNING"
 GOVERNMENT_WARNING_PREFIX = f"{GOVERNMENT_WARNING_HEADING}:"
-GOVERNMENT_WARNING_HEADING_PATTERN = re.compile(r"\bGOVERNMENT\s+WARNING\b\s*:?\s*")
+GOVERNMENT_WARNING_HEADING_PATTERN = re.compile(r"\s*GOVERNMENT\s+WARNING\s*:?\s*")
 GOVERNMENT_WARNING_BODY = (
     "(1) According to the Surgeon General, women should not drink alcoholic beverages "
     "during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic "
@@ -83,16 +83,70 @@ class ResultGuardService:
         return field
 
     def _guard_government_warning(self, field: VerificationFieldResult) -> VerificationFieldResult:
-        field = self._guard_required_values(field)
-        if field.status != "pass":
-            return field
-
-        label_value = field.label_value or ""
-        heading_match = GOVERNMENT_WARNING_HEADING_PATTERN.search(label_value)
-        if not heading_match:
+        extraction = field.warning_extraction
+        missing_extraction_fields = [
+            name
+            for name in (
+                "block_visible",
+                "heading_text",
+                "body_text",
+                "full_text",
+                "unreadable_or_obscured",
+            )
+            if extraction is None or getattr(extraction, name) is None
+        ]
+        if missing_extraction_fields:
             return field.model_copy(
                 update={
                     "status": "fail",
+                    "label_value": self._warning_visible_label_value(field),
+                    "reason": (
+                        "Government warning could not be verified because the model did "
+                        "not return the required warning text extraction fields."
+                    ),
+                }
+            )
+        assert extraction is not None
+
+        if not (extraction.full_text or "").strip():
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "label_value": self._warning_visible_label_value(field),
+                    "reason": (
+                        "Government warning could not be verified because the model did "
+                        "not return the full visible warning text."
+                    ),
+                }
+            )
+
+        if not extraction.block_visible:
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "label_value": self._warning_visible_label_value(field),
+                    "reason": "Government warning can pass only when the warning block is visible.",
+                }
+            )
+
+        if extraction.unreadable_or_obscured:
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "label_value": self._warning_visible_label_value(field),
+                    "reason": (
+                        "Government warning can pass only when the full warning text is "
+                        "readable and unobscured."
+                    ),
+                }
+            )
+
+        heading_text = extraction.heading_text or ""
+        if GOVERNMENT_WARNING_HEADING_PATTERN.fullmatch(heading_text) is None:
+            return field.model_copy(
+                update={
+                    "status": "fail",
+                    "label_value": self._warning_visible_label_value(field),
                     "reason": (
                         "Government warning can pass only when the heading words "
                         "'GOVERNMENT WARNING' are visible in all caps."
@@ -100,16 +154,27 @@ class ResultGuardService:
                 }
             )
 
-        body = label_value[heading_match.end():].strip()
+        body = extraction.body_text or ""
         if not self._normalized_warning_body_matches(body):
             return field.model_copy(
                 update={
                     "status": "fail",
+                    "label_value": self._warning_visible_label_value(field),
                     "reason": self._warning_mismatch_reason(body),
                 }
             )
 
-        return field.model_copy(update={"status": "pass"})
+        return field.model_copy(
+            update={
+                "status": "pass",
+                "label_value": self._warning_visible_label_value(field),
+            }
+        )
+
+    def _warning_visible_label_value(self, field: VerificationFieldResult) -> str | None:
+        if field.warning_extraction and (field.warning_extraction.full_text or "").strip():
+            return field.warning_extraction.full_text
+        return field.label_value
 
     def _guard_artifact_legibility(self, field: VerificationFieldResult) -> VerificationFieldResult:
         if field.status == "pass" and not self._has_reviewable_value(field.label_value):

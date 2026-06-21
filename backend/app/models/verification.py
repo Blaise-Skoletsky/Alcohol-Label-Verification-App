@@ -19,12 +19,21 @@ class VerificationEvidence(BaseModel):
     source_excerpt: str | None = None
 
 
+class GovernmentWarningExtraction(BaseModel):
+    block_visible: bool | None = None
+    heading_text: str | None = None
+    body_text: str | None = None
+    full_text: str | None = None
+    unreadable_or_obscured: bool | None = None
+
+
 class VerificationFieldResult(BaseModel):
     status: Literal["pass", "fail"]
     application_value: str | None = None
     label_value: str | None = None
     reason: str
     evidence: list[VerificationEvidence] = Field(default_factory=list)
+    warning_extraction: GovernmentWarningExtraction | None = Field(default=None, exclude=True)
 
 
 class VerificationFields(BaseModel):

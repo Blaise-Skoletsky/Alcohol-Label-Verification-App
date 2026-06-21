@@ -200,11 +200,9 @@ class LocalModelVerificationProvider:
         return b64encode(upload.content).decode("ascii")
 
     def _build_response_schema(self, requested_fields: tuple[str, ...]) -> dict:
-        field_schema = {
-            "type": "object",
-            "additionalProperties": False,
-            "required": ["status", "application_value", "label_value", "reason", "evidence"],
-            "properties": {
+        def field_schema(field_name: str) -> dict:
+            required = ["status", "application_value", "label_value", "reason", "evidence"]
+            properties = {
                 "status": {"type": "string", "enum": ["pass", "fail"]},
                 "application_value": {"type": "string"},
                 "label_value": {"type": "string"},
@@ -221,8 +219,33 @@ class LocalModelVerificationProvider:
                         },
                     },
                 },
-            },
-        }
+            }
+            if field_name == "government_warning":
+                required.extend(
+                    [
+                        "warning_block_visible",
+                        "warning_heading_text",
+                        "warning_body_text",
+                        "warning_full_text",
+                        "warning_unreadable_or_obscured",
+                    ]
+                )
+                properties.update(
+                    {
+                        "warning_block_visible": {"type": "boolean"},
+                        "warning_heading_text": {"type": "string"},
+                        "warning_body_text": {"type": "string"},
+                        "warning_full_text": {"type": "string"},
+                        "warning_unreadable_or_obscured": {"type": "boolean"},
+                    }
+                )
+            return {
+                "type": "object",
+                "additionalProperties": False,
+                "required": required,
+                "properties": properties,
+            }
+
         return {
             "type": "object",
             "additionalProperties": False,
@@ -235,7 +258,7 @@ class LocalModelVerificationProvider:
                     "additionalProperties": False,
                     "required": list(requested_fields),
                     "properties": {
-                        field_name: field_schema for field_name in requested_fields
+                        field_name: field_schema(field_name) for field_name in requested_fields
                     },
                 },
             },

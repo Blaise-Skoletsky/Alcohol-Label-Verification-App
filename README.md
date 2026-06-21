@@ -31,6 +31,31 @@ because those should still pass when the required information is visible.
 
 ## Design Decisions
 
+### Label Extraction
+
+For label extraction, I chose not to make one large model call responsible for
+everything. The app splits each review into three focused vision-model calls:
+one for legibility and the government warning, one for product fields like
+brand, class/type, alcohol content, net contents, and color disclosures, and one
+for origin-related fields like name/address and country of origin. I did this
+because labels are visually dense, and smaller prompts make it easier to keep the
+model focused on the evidence it is supposed to read instead of asking it to
+solve the whole review in one pass. The tradeoff here is extra expense when 
+you do three times the amount of LLM calls, though these models are fairly lightweight, and very cost efficient, 
+even at scale. We are also able to not sacrifice much in terms of processing time increases, 
+due to the ability to run all three LLM calls in parallel. 
+
+I also kept the model contract JSON-first: the prompt asks for structured JSON,  and the 
+backend parses the response into typed field results. That makes the result easier to 
+audit in the UI and gives the backend something deterministic to validate instead of a 
+loose paragraph of model output. Finally, the app runs a verification guard after the
+model responds. The guard exists because the model can still be overconfident,
+especially on things like alcohol-content normalization, beverage-class
+conflicts, missing label values, or the exact government warning text. If the
+model says a field passed but the structured evidence does not support that
+pass, the guard can turn it into a fail before the result reaches the reviewer.
+
+
 ### Input Format
 
 The first major design decision was the input format. When I started, I looked at
