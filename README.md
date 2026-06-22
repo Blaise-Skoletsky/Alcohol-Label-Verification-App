@@ -1,47 +1,96 @@
 # Alcohol Label Verification App
 
+A prototype for checking alcohol label artwork against submitted application
+values. The app uses a vision-capable LLM to read labels, then applies backend
+guards so the final result is based on deterministic comparison rules rather
+than model judgment alone.
+
+## Contents
+
+- [How It Works](#how-it-works)
+- [Verification Scope](#verification-scope)
+- [Demo Testing Controls](#demo-testing-controls)
+- [Design Decisions](#design-decisions)
+- [Hosting On Azure](#hosting-on-azure)
+- [Running Locally](#running-locally)
+- [Project Docs](#project-docs)
+
+## How It Works
+
+**Core principle:** the LLM reads; deterministic code judges.
+
+Vision models are useful for extracting text from dense, imperfect label
+artwork. Deterministic code is better for refusing false matches, such as
+treating `40%` as a harmless typo for `11%`.
+
+| Step | Responsibility | Output |
+| --- | --- | --- |
+| 1 | Reviewer submits structured application values and label artwork. | Explicit comparison target |
+| 2 | Gemini-family vision model reads the uploaded label. | Structured label evidence |
+| 3 | Backend parses the model response. | Typed field results |
+| 4 | `backend/app/services/result_guard_service.py` applies deterministic guards. | Enforced pass/fail result |
+| 5 | UI displays the overall result and field-level evidence. | Auditable reviewer view |
+
+## Verification Scope
+
+| Required element | What the app checks |
+| --- | --- |
+| Brand name | Brand and fanciful-name evidence, including meaningful spelling and spacing variants |
+| Class/type | Broad beverage family alignment: wine, spirits, or malt |
+| Alcohol content | Numeric ABV/proof comparison with tolerant parsing |
+| Net contents | Visible quantity and unit |
+| Name and address | Producer, bottler, importer, or responsible-party statement |
+| Country of origin | Required imported-origin evidence and domestic/foreign contradictions |
+| Government warning | Visible block, all-caps heading, legible text, and required federal wording |
+
+The comparison rules are intentionally conservative:
+
+- Alcohol content is compared numerically, including percent, proof, decimal
+  comma, and bare-number formats.
+- Class/type must match at the broad TTB-style family level before style details
+  are considered.
+- Brand matching allows meaningful spelling, spacing, and shared-word variants
+  such as `STONE'S THROW` and `Stone's Throw`.
+- Domestic applications fail when the label shows contradictory foreign-origin
+  evidence.
+- Government warning checks require a visible warning block, an all-caps
+  `GOVERNMENT WARNING` heading, legible text, and the required statement.
+- Missing, unreadable, ambiguous, or unsupported evidence cannot silently pass.
+
 ## Demo Testing Controls
 
-The app includes two demo-marked buttons that are only there to provide sample labels
-for testing.
+The app includes demo-marked buttons for repeatable testing:
 
-One button creates a large spreadsheet-style batch with roughly 300 labels. I
-included this because large-batch handling was one of the requirements I wanted
-to make easy to test.
+| Control | Purpose |
+| --- | --- |
+| Large demo batch | Creates a spreadsheet-style batch with roughly 300 labels to exercise batch handling. |
+| Sample pass/fail set | Loads labels and applications with expected pass/fail outcomes. |
 
-The other button loads sample labels and applications that are expected to either
-pass or fail. These samples include deliberate edits and mismatches, such as
-labels where the government warning was removed or blurred, and application form
-values where the alcohol percentage does not match the label. I also included a
-few passing samples that were deliberately edited with glare or rotated labels,
-because those should still pass when the required information is visible. 
+The sample set includes deliberate mismatches, such as removed or blurred
+government warnings and alcohol-content values that do not match the label. It
+also includes passing examples with glare or rotated labels, which should still
+pass when the required information remains visible.
 
 ## Design Decisions
 
 ### Label Extraction
 
-For label extraction, I chose not to make one large model call responsible for
-everything. The app splits each review into three focused vision-model calls:
-one for legibility and the government warning, one for product fields like
-brand, class/type, alcohol content, net contents, and color disclosures, and one
-for origin-related fields like name/address and country of origin. I did this
-because labels are visually dense, and smaller prompts make it easier to keep the
-model focused on the evidence it is supposed to read instead of asking it to
-solve the whole review in one pass. The tradeoff here is extra expense when 
-you do three times the amount of LLM calls, though these models are fairly lightweight, and very cost efficient, 
-even at scale. We are also able to not sacrifice much in terms of processing time increases, 
-due to the ability to run all three LLM calls in parallel. 
+The app uses focused vision-model prompts instead of one large unstructured
+request. Each prompt receives the full label artwork, but the requested evidence
+is scoped:
 
-I also kept the model contract JSON-first: the prompt asks for structured JSON,  and the 
-backend parses the response into typed field results. That makes the result easier to 
-audit in the UI and gives the backend something deterministic to validate instead of a 
-loose paragraph of model output. Finally, the app runs a verification guard after the
-model responds. The guard exists because the model can still be overconfident,
-especially on things like alcohol-content normalization, beverage-class
-conflicts, missing label values, or the exact government warning text. If the
-model says a field passed but the structured evidence does not support that
-pass, the guard can turn it into a fail before the result reaches the reviewer.
+- Legibility and government warning
+- Product fields such as brand, class/type, alcohol content, net contents, and
+  color disclosures
+- Origin fields such as name/address and country of origin
 
+This keeps the model focused on reading visible evidence while preserving a
+JSON-first contract for the backend. The tradeoff is additional model calls, but
+the calls are lightweight and can run in parallel.
+
+After the model responds, the backend runs deterministic guards. These guards
+exist because the model can still be overconfident about alcohol normalization,
+beverage-class conflicts, missing values, and exact government-warning wording.
 
 ### Input Format
 
@@ -91,53 +140,26 @@ images, enter the required application details, verify, and inspect the result.
 
 ### Model Choice
 
-I knew the extraction and comparison step would use a vision-capable LLM. This is
-the part of the problem where a model is useful: reading imperfect label artwork,
-extracting visible text, comparing it to structured application values, and
-returning evidence for the reviewer.
+OpenRouter is used for the hosted path because it provides one API surface for
+multiple vision-capable models. That keeps model switching and fallback behavior
+outside the core product workflow.
 
-I chose OpenRouter for the hosted path because it gives the backend one API
-surface for multiple vision-capable models. That makes it easier to switch
-models, configure fallbacks, and avoid baking one provider directly into the
-product design. For this prototype, that mattered more than optimizing around a
-single vendor-specific SDK.
-
-Local execution was the harder tradeoff. I wanted the app to be runnable without
-an OpenRouter key, so I added a local provider path through Ollama. The downside
-is that local verification is slower and less accurate, depending heavily on the
-machine and model. I am comfortable with that tradeoff because local mode is
-mainly for demonstration. The deployed path can optimize for both
-speed and quality by using stronger hosted models.
-
-## Label Requirements
-
-Sources and more detail about label and application requirements are described
-in [docs/assumptions.md](docs/assumptions.md).
-
-- Brand name
-- Beverage class and class/type designation
-- Alcohol content when required by beverage class and trigger fields
-- Net contents
-- Name and address of producer, bottler, importer, or similar responsible party
-- Country of origin for imported products
-- Malt beverage color additive disclosure when applicable
-- Government Health Warning Statement as a strict label-only check
-
-## Design And Proposal
-
-The design docs are split by purpose:
-
-- [docs/proposal.md](docs/proposal.md) explains the product goals, invariants,
-  architecture posture, security assumptions, and what the prototype is trying
-  to prove.
-- [docs/design.md](docs/design.md) describes runtime behavior: request flow, UI
-  behavior, batch processing, model-provider strategy, failover expectations, and
-  Azure-style deployment mechanics.
-- [docs/assumptions.md](docs/assumptions.md) captures the working assumptions
-  for verification logic.
+Local execution is supported through an OpenAI-compatible local provider path,
+such as Ollama. Local mode is useful for demonstration, but it is slower and less
+accurate than the hosted model path.
 
 ## Running Locally
 
-Use [docs/startup.md](docs/startup.md) for the full local startup guide. If you
-run the setup with Ollama, verification will be slower than in the deployed
-environment. Verification requests are sent as batches of 1 when running locally.
+Use [docs/startup.md](docs/startup.md) for the full local startup guide.
+
+Local Ollama-based verification is slower than the deployed OpenRouter path.
+Verification requests are sent as batches of 1 when running locally.
+
+## Project Docs
+
+| Document | Purpose |
+| --- | --- |
+| [docs/proposal.md](docs/proposal.md) | Product goals, invariants, architecture posture, and prototype scope |
+| [docs/design.md](docs/design.md) | Runtime behavior, batch processing, provider strategy, failover expectations, and Azure deployment mechanics |
+| [docs/assumptions.md](docs/assumptions.md) | Verification assumptions and label/application requirements |
+| [docs/startup.md](docs/startup.md) | Local setup and startup instructions |
